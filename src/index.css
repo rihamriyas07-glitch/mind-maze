@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #0F1023;
+    color: #F1F5F9;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 16, 35, 0.7);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(107, 78, 255, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 78, 255, 0.8);
+}
+
+/* Custom glowing & frosted glass effects */
+.glow-purple {
+  box-shadow: 0 0 25px -5px rgba(107, 78, 255, 0.5);
+}
+.glow-cyan {
+  box-shadow: 0 0 25px -5px rgba(6, 182, 212, 0.5);
+}
+.glow-bulb {
+  filter: drop-shadow(0 0 12px rgba(250, 204, 21, 0.85)) drop-shadow(0 0 24px rgba(107, 78, 255, 0.6));
+}
+
+/* Frosted Glass Theme Classes */
+.glass-frosted {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-frosted-subtle {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-frosted-cyan {
+  background: rgba(6, 182, 212, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+
+.glass-frosted-purple {
+  background: rgba(107, 78, 255, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(107, 78, 255, 0.3);
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-panel-glow {
+  background: linear-gradient(135deg, rgba(107, 78, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(107, 78, 255, 0.3);
+}
+
+.glass-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.glass-input:focus {
+  border-color: #00F5FF;
+  box-shadow: 0 0 15px -3px rgba(0, 245, 255, 0.3);
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 4s ease-in-out infinite;
+}
+
+@keyframes mazeDash {
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+
+.maze-animate-path {
+  stroke-dasharray: 20, 10;
+  animation: mazeDash 30s linear infinite;
+}
+
+

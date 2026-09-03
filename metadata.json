@@ -1,0 +1,6 @@
+{
+  "name": "Mind Maze",
+  "description": "AI-powered GCE A/L past paper practice platform with curated study plans, interactive weekly timetables, daily syllabus topic tracking, quizzes, and mistake notebook.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
