@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ScreenId, UserProfile } from '../../types';
-import { INITIAL_STUDY_PLANS, INITIAL_TIMETABLE, INITIAL_DAILY_TOPICS } from '../../data/mockStudyData';
+import { ScreenId, UserProfile, StreamType } from '../../types';
+import {
+  ALL_STREAM_STUDY_PLANS,
+  ALL_STREAM_TIMETABLES,
+  ALL_STREAM_DAILY_TOPICS,
+  GCE_AL_STREAMS,
+} from '../../data/streamStudyData';
 import {
   CalendarDays,
   Clock,
@@ -44,11 +49,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [dashboardTimetableView, setDashboardTimetableView] = useState<'table' | 'cards'>('table');
   const [comingSoonModalSubject, setComingSoonModalSubject] = useState<string | null>(null);
 
+  const currentStream = (userProfile.stream || 'Maths') as StreamType;
+  const streamInfo = GCE_AL_STREAMS.find((s) => s.id === currentStream) || GCE_AL_STREAMS[0];
+
   // Local state for study plans & timetable checkoffs to provide instant interactivity
-  const [plans, setPlans] = useState(INITIAL_STUDY_PLANS);
+  const [plans, setPlans] = useState(() => ALL_STREAM_STUDY_PLANS[currentStream] || ALL_STREAM_STUDY_PLANS.Maths);
   const [timetable, setTimetable] = useState(() => {
     try {
-      const saved = localStorage.getItem('al_physics_timetable');
+      const saved = localStorage.getItem(`al_timetable_${currentStream}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -56,18 +64,38 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     } catch (e) {
       // ignore
     }
-    return INITIAL_TIMETABLE;
+    return ALL_STREAM_TIMETABLES[currentStream] || ALL_STREAM_TIMETABLES.Maths;
   });
-  const [dailyTopics, setDailyTopics] = useState(INITIAL_DAILY_TOPICS);
+  const [dailyTopics, setDailyTopics] = useState(() => ALL_STREAM_DAILY_TOPICS[currentStream] || ALL_STREAM_DAILY_TOPICS.Maths);
+
+  // Sync to stream changes
+  useEffect(() => {
+    setPlans(ALL_STREAM_STUDY_PLANS[currentStream] || ALL_STREAM_STUDY_PLANS.Maths);
+    try {
+      const saved = localStorage.getItem(`al_timetable_${currentStream}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setTimetable(parsed);
+          setDailyTopics(ALL_STREAM_DAILY_TOPICS[currentStream] || ALL_STREAM_DAILY_TOPICS.Maths);
+          return;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    setTimetable(ALL_STREAM_TIMETABLES[currentStream] || ALL_STREAM_TIMETABLES.Maths);
+    setDailyTopics(ALL_STREAM_DAILY_TOPICS[currentStream] || ALL_STREAM_DAILY_TOPICS.Maths);
+  }, [currentStream]);
 
   // Sync to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('al_physics_timetable', JSON.stringify(timetable));
+      localStorage.setItem(`al_timetable_${currentStream}`, JSON.stringify(timetable));
     } catch (e) {
       // ignore
     }
-  }, [timetable]);
+  }, [timetable, currentStream]);
 
   // Days remaining calculation
   const calculateDaysRemaining = (dateStr?: string) => {
@@ -188,28 +216,30 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           </div>
 
           {/* Quick Metrics & CTA */}
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
-            <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-2.5 text-center min-w-[110px] backdrop-blur-md">
-              <div className="flex items-center justify-center gap-1 text-[11px] text-slate-400 font-medium">
-                <Clock className="w-3 h-3 text-cyan-400" />
-                <span>Exam Sitting</span>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0 w-full md:w-auto">
+            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:items-center sm:gap-3">
+              <div className="rounded-2xl border border-white/10 bg-black/20 px-3.5 sm:px-4 py-2.5 text-center min-w-[100px] backdrop-blur-md">
+                <div className="flex items-center justify-center gap-1 text-[11px] text-slate-400 font-medium">
+                  <Clock className="w-3 h-3 text-cyan-400" />
+                  <span>Exam Sitting</span>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-white">{daysLeft}</div>
+                <div className="text-[9px] uppercase tracking-wider text-purple-300 font-bold">Days Left</div>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-white">{daysLeft}</div>
-              <div className="text-[9px] uppercase tracking-wider text-purple-300 font-bold">Days Left</div>
-            </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-2.5 text-center min-w-[110px] backdrop-blur-md">
-              <div className="flex items-center justify-center gap-1 text-[11px] text-slate-400 font-medium">
-                <Flame className="w-3 h-3 text-orange-400" />
-                <span>Daily Streak</span>
+              <div className="rounded-2xl border border-white/10 bg-black/20 px-3.5 sm:px-4 py-2.5 text-center min-w-[100px] backdrop-blur-md">
+                <div className="flex items-center justify-center gap-1 text-[11px] text-slate-400 font-medium">
+                  <Flame className="w-3 h-3 text-orange-400" />
+                  <span>Daily Streak</span>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-orange-300">{userProfile.streakDays} Days</div>
+                <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Consistent</div>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-orange-300">{userProfile.streakDays} Days</div>
-              <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Consistent</div>
             </div>
 
             <button
               onClick={() => onNavigate('study-plan')}
-              className="py-3 px-5 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-xs font-bold shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95 shrink-0"
+              className="w-full sm:w-auto py-3 px-5 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-xs font-bold shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95 shrink-0"
             >
               <CalendarDays className="w-4 h-4 text-cyan-300" />
               <span>Open Full Routine Screen</span>

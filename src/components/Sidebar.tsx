@@ -1,21 +1,18 @@
 import React from 'react';
 import { ScreenId, UserProfile } from '../types';
 import {
-  LayoutDashboard,
-  Sparkles,
-  BookOpen,
-  BookmarkCheck,
-  Target,
-  BarChart3,
-  SlidersHorizontal,
+  CalendarDays,
+  Clock,
+  CheckSquare,
   Home,
   ChevronLeft,
   ChevronRight,
   Flame,
   Lightbulb,
-  CalendarDays,
   User,
   LogIn,
+  LogOut,
+  X,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -28,6 +25,7 @@ interface SidebarProps {
   onCloseMobile?: () => void;
   userProfile?: UserProfile;
   onOpenAuth?: (mode: 'signin' | 'signup') => void;
+  onSignOut?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -40,67 +38,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   userProfile,
   onOpenAuth,
+  onSignOut,
 }) => {
   const navItems = [
     {
-      id: 'dashboard' as ScreenId,
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      badge: null,
-    },
-    {
       id: 'study-plan' as ScreenId,
-      label: 'Study Plans & Routine',
+      label: 'Study Plans',
       icon: CalendarDays,
-      badge: 'Live',
+      badge: 'Plans',
+      badgeColor: 'bg-[#6B4EFF]/20 text-purple-300 border border-[#6B4EFF]/40',
+    },
+    {
+      id: 'timetable' as ScreenId,
+      label: 'Time Tables',
+      icon: Clock,
+      badge: 'Weekly',
+      badgeColor: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40',
+    },
+    {
+      id: 'daily-topics' as ScreenId,
+      label: 'Daily Cover Topics',
+      icon: CheckSquare,
+      badge: 'Checklist',
       badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40',
-    },
-    {
-      id: 'practice' as ScreenId,
-      label: 'AI Practice Quiz',
-      icon: Sparkles,
-      badge: 'Soon',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
-    },
-    {
-      id: 'past-papers' as ScreenId,
-      label: 'Past Paper Library',
-      icon: BookOpen,
-      badge: 'Soon',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
-    },
-    {
-      id: 'mistakes' as ScreenId,
-      label: 'Mistake Notebook',
-      icon: BookmarkCheck,
-      badge: 'Soon',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
-    },
-    {
-      id: 'targets' as ScreenId,
-      label: 'Smart Targets & XP',
-      icon: Target,
-      badge: 'Soon',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
-    },
-    {
-      id: 'analytics' as ScreenId,
-      label: 'Analytics & Repeat AI',
-      icon: BarChart3,
-      badge: 'Soon',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
     },
   ];
 
   const secondaryItems = [
     {
-      id: 'onboarding' as ScreenId,
-      label: 'Stream & Preferences',
-      icon: SlidersHorizontal,
-    },
-    {
       id: 'landing' as ScreenId,
-      label: 'Landing Page',
+      label: 'Overview & Info',
       icon: Home,
     },
   ];
@@ -143,10 +110,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Desktop collapse toggle */}
           <button
             onClick={onToggleCollapse}
-            className="hidden lg:flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+            className="hidden lg:flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-slate-400 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
             title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
+
+          {/* Mobile close button */}
+          <button
+            onClick={onCloseMobile}
+            className="flex lg:hidden h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-300 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
+            aria-label="Close navigation drawer"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
 
@@ -257,33 +233,67 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {(!isCollapsed || isOpenMobile) && (
           <div className="border-t border-white/10 p-3.5 space-y-2">
             {userProfile && (
-              <div
-                onClick={() => (onOpenAuth ? onOpenAuth('signin') : onNavigate('onboarding'))}
-                className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10 hover:border-cyan-400/40 hover:bg-white/10 transition-all cursor-pointer"
-                title="Manage Account or Switch User"
-              >
-                <div className="flex items-center gap-2 overflow-hidden">
-                  {userProfile.avatar ? (
-                    <img
-                      src={userProfile.avatar}
-                      alt={userProfile.name}
-                      className="w-6 h-6 rounded-full object-cover shrink-0 border border-cyan-400/50"
-                    />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-[#6B4EFF] text-white flex items-center justify-center font-bold text-[10px] shrink-0">
-                      {userProfile.name ? userProfile.name.charAt(0) : 'U'}
-                    </div>
-                  )}
-                  <div className="truncate">
-                    <div className="text-xs font-bold text-white truncate">
-                      {userProfile.name}
-                    </div>
-                    <div className="text-[10px] text-slate-400 truncate">
-                      {userProfile.stream} Stream
+              <div className="rounded-xl bg-white/5 border border-white/10 p-2.5 space-y-2">
+                <div
+                  onClick={() => (onOpenAuth ? onOpenAuth('signin') : onNavigate('onboarding'))}
+                  className="flex items-center justify-between hover:opacity-90 transition-opacity cursor-pointer"
+                  title="Switch Account or Edit Profile"
+                >
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    {userProfile.avatar ? (
+                      <img
+                        src={userProfile.avatar}
+                        alt={userProfile.name}
+                        className="w-7 h-7 rounded-full object-cover shrink-0 border border-cyan-400/50"
+                      />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-[#6B4EFF] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                        {userProfile.name ? userProfile.name.charAt(0) : 'U'}
+                      </div>
+                    )}
+                    <div className="truncate">
+                      <div className="text-xs font-bold text-white truncate">
+                        {userProfile.name}
+                      </div>
+                      <div className="text-[10px] text-slate-400 truncate">
+                        {userProfile.isAuthenticated ? `${userProfile.stream} Stream` : 'Guest Session'}
+                      </div>
                     </div>
                   </div>
                 </div>
-                <LogIn className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+
+                {/* Sign Out or Sign In action */}
+                {userProfile.isAuthenticated && userProfile.email ? (
+                  onSignOut && (
+                    <button
+                      id="btn-sidebar-signout"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onCloseMobile) onCloseMobile();
+                        onSignOut();
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[11px] font-semibold transition-colors cursor-pointer border border-rose-500/20"
+                    >
+                      <LogOut className="w-3 h-3" />
+                      <span>Sign Out</span>
+                    </button>
+                  )
+                ) : (
+                  <button
+                    id="btn-sidebar-signin"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onCloseMobile) onCloseMobile();
+                      if (onOpenAuth) onOpenAuth('signin');
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-[11px] font-bold transition-colors cursor-pointer shadow-sm"
+                  >
+                    <LogIn className="w-3 h-3 text-cyan-300" />
+                    <span>Sign In</span>
+                  </button>
+                )}
               </div>
             )}
             <div className="text-[11px] text-slate-400 flex items-center justify-between px-1">

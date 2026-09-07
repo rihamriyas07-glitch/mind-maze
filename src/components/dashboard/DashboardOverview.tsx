@@ -1,0 +1,692 @@
+import React from 'react';
+import { DailyTask, ScreenId, StreamType, SyllabusTopic, TimetableEntry, StreakData } from '../../types';
+import {
+  LayoutDashboard,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  BookOpen,
+  TrendingUp,
+  Bell,
+  BellOff,
+  Flame,
+  ArrowRight,
+  Sparkles,
+  ChevronRight,
+  Circle,
+  Plus,
+  Trophy,
+  Volume2,
+  Zap,
+} from 'lucide-react';
+import { getTodayDateString, getTodayDayOfWeek, getFormattedDateDisplay } from '../../lib/storage';
+import { getSubjectsForStream } from '../../data/alSyllabusData';
+import { playStudyChime } from '../../lib/notificationService';
+import { PWAInstallButton } from '../PWAInstallButton';
+import {
+  calculateSubjectProgression,
+  calculateOverallStreamProgression,
+} from '../../lib/syllabusProgression';
+
+interface DashboardOverviewProps {
+  stream: StreamType;
+  physicalScienceElective?: 'Chemistry' | 'ICT';
+  onSelectElective?: (elective: 'Chemistry' | 'ICT') => void;
+  timetableEntries: TimetableEntry[];
+  dailyTasks: DailyTask[];
+  syllabusTopics: SyllabusTopic[];
+  streakData?: StreakData;
+  notificationPermission: NotificationPermission | 'unsupported';
+  onRequestNotificationPermission: () => void;
+  onTestSmartReminder?: () => void;
+  onTestNudge?: () => void;
+  onNavigate: (screen: ScreenId) => void;
+  onToggleTask: (taskId: string) => void;
+}
+
+export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
+  stream,
+  physicalScienceElective = 'Chemistry',
+  onSelectElective,
+  timetableEntries,
+  dailyTasks,
+  syllabusTopics,
+  streakData = { currentStreak: 5, bestStreak: 7, completedDates: [], isCompletedToday: true },
+  notificationPermission,
+  onRequestNotificationPermission,
+  onTestSmartReminder,
+  onTestNudge,
+  onNavigate,
+  onToggleTask,
+}) => {
+  const todayStr = getTodayDateString();
+  const todayDayOfWeek = getTodayDayOfWeek();
+
+  // Selected stream subjects:
+  // Physical Science: Combined Mathematics, Physics, and either Chemistry OR ICT
+  // Biological Science: Biology, Chemistry, Physics (Combined Maths replaced with Biology)
+  const streamSubjectMetas = getSubjectsForStream(stream, physicalScienceElective);
+
+  // Today's timetable entries
+  const todayBlocks = timetableEntries
+    .filter((e) => e.dayOfWeek === todayDayOfWeek)
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  // Today's tasks
+  const todayTasksList = dailyTasks.filter((t) => t.date === todayStr);
+  const completedTodayTasks = todayTasksList.filter((t) => t.isCompleted).length;
+  const totalTodayTasks = todayTasksList.length;
+  const todayTaskPercent = totalTodayTasks === 0 ? 0 : Math.round((completedTodayTasks / totalTodayTasks) * 100);
+
+  // Overall syllabus completion across the stream's 3 exact subjects
+  const streamProgression = calculateOverallStreamProgression(streamSubjectMetas, syllabusTopics);
+  const totalTopicsCount = streamProgression.totalTopics;
+  const completedTopicsCount = streamProgression.completedTopics;
+  const overallSyllabusPercent = streamProgression.totalPercentage;
+
+  // Calculate total scheduled hours for today
+  let totalTodayMinutes = 0;
+  todayBlocks.forEach((b) => {
+    const [sh, sm] = b.startTime.split(':').map(Number);
+    const [eh, em] = b.endTime.split(':').map(Number);
+    const diff = eh * 60 + em - (sh * 60 + sm);
+    if (diff > 0) totalTodayMinutes += diff;
+  });
+  const todayHoursFormatted = (totalTodayMinutes / 60).toFixed(1);
+
+  // Find next upcoming block today
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const nextBlock = todayBlocks.find((b) => {
+    const [sh, sm] = b.startTime.split(':').map(Number);
+    return sh * 60 + sm >= currentMinutes;
+  }) || todayBlocks[0];
+
+  return (
+    <div id="dashboard-overview-view" className="space-y-6 max-w-7xl mx-auto pb-8">
+      {/* Fallback in-app reminder banner if notification permission is denied or default */}
+      {notificationPermission !== 'granted' && (
+        <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-[#1E1835] to-purple-500/15 p-3.5 sm:p-4 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
+              <BellOff className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-amber-200">
+                Timetable Reminders are currently {notificationPermission === 'denied' ? 'disabled in browser' : 'inactive'}
+              </h4>
+              <p className="text-[11px] text-slate-300">
+                {notificationPermission === 'denied'
+                  ? 'Notifications were blocked in your browser. Mind Maze will play in-app study chimes whenever you keep this tab open.'
+                  : 'Enable browser notifications to receive motivational, progress-aware alerts before each scheduled A/L revision session.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 justify-start sm:justify-end shrink-0">
+            {notificationPermission !== 'denied' && (
+              <button
+                onClick={onRequestNotificationPermission}
+                id="btn-banner-allow-notifications"
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#6B4EFF] to-[#8B5CF6] hover:from-[#7C5DFA] text-xs font-bold text-white transition shadow-md cursor-pointer min-h-[44px] flex items-center gap-1.5"
+              >
+                <Bell className="w-4 h-4" />
+                <span>Enable Notifications</span>
+              </button>
+            )}
+            <button
+              onClick={() => {
+                playStudyChime();
+              }}
+              title="Test audio chime"
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-cyan-300 transition cursor-pointer min-h-[44px] flex items-center gap-1.5"
+            >
+              <Volume2 className="w-4 h-4" />
+              <span>Test Chime</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Smart & Contextual Notifications Active Banner */}
+      {notificationPermission === 'granted' && (
+        <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-r from-[#1B1736] via-[#161933] to-[#121E38] p-3.5 sm:p-4 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300 shrink-0">
+              <Bell className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-xs sm:text-sm font-bold text-purple-200">
+                  Motivational & Smart Reminders Active
+                </h4>
+                <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30 font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  Live Sync
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                Contextual alerts cheer on your last topic, protect your 🔥 {streakData.currentStreak}-day streak, and gently nudge before 10 PM.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 justify-start sm:justify-end shrink-0">
+            {onTestSmartReminder && (
+              <button
+                onClick={onTestSmartReminder}
+                id="btn-test-smart-reminder"
+                title="Simulate a smart contextual study notification"
+                className="px-3 py-2 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-400/40 text-xs font-bold text-purple-200 transition cursor-pointer flex items-center gap-1.5 min-h-[40px]"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                <span>Test Smart Alert</span>
+              </button>
+            )}
+            {onTestNudge && (
+              <button
+                onClick={onTestNudge}
+                id="btn-test-nudge-reminder"
+                title="Simulate a gentle progress nudge"
+                className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-xs font-bold text-amber-200 transition cursor-pointer flex items-center gap-1.5 min-h-[40px]"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                <span>Test Nudge</span>
+              </button>
+            )}
+            <button
+              onClick={() => playStudyChime()}
+              title="Test audio chime"
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-cyan-300 transition cursor-pointer flex items-center gap-1.5 min-h-[40px]"
+            >
+              <Volume2 className="w-3.5 h-3.5" />
+              <span>Chime</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* PWA Install Promotion Card */}
+      <PWAInstallButton variant="card" />
+
+      {/* Hero Welcome Card */}
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#1B1647] via-[#12142B] to-[#0D0F1F] p-5 sm:p-7 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#6B4EFF]/20 border border-[#6B4EFF]/40 text-cyan-300 text-xs font-bold">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                <span>
+                  GCE A/L Sri Lanka •{' '}
+                  {stream === 'Biological Science' || (stream as string) === 'Bio'
+                    ? 'Biological Science Stream'
+                    : 'Physical Science Stream'}
+                </span>
+              </div>
+
+              {/* Streak Badge */}
+              <div
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide border transition-all ${
+                  streakData.currentStreak > 0
+                    ? 'bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-red-500/15 border-amber-500/40 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.25)]'
+                    : 'bg-white/5 border-white/10 text-slate-400'
+                }`}
+                title={
+                  streakData.isCompletedToday
+                    ? `Completed today! Current streak: ${streakData.currentStreak} days (Best: ${streakData.bestStreak})`
+                    : streakData.currentStreak > 0
+                    ? `Active streak: ${streakData.currentStreak} days! Complete 1 study task today to extend it.`
+                    : 'Complete a planned study task today to start your streak!'
+                }
+              >
+                <Flame
+                  className={`w-3.5 h-3.5 ${
+                    streakData.currentStreak > 0 ? 'text-amber-400 fill-amber-400 animate-pulse' : 'text-slate-500'
+                  }`}
+                />
+                <span>🔥 {streakData.currentStreak} day streak</span>
+                {streakData.isCompletedToday ? (
+                  <span className="text-[10px] bg-emerald-500/25 text-emerald-300 px-1.5 py-0.5 rounded-full font-bold border border-emerald-500/30">
+                    Done Today ✓
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full font-semibold border border-amber-500/30">
+                    1 Task To Extend
+                  </span>
+                )}
+              </div>
+
+              {/* Physical Science 3rd subject toggle */}
+              {(stream === 'Physical Science' || (stream as string) === 'Maths') && onSelectElective && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 border border-white/15 text-xs">
+                  <span className="text-[10px] text-slate-300 font-semibold">3rd Subject:</span>
+                  <button
+                    type="button"
+                    onClick={() => onSelectElective('Chemistry')}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                      physicalScienceElective === 'Chemistry'
+                        ? 'bg-purple-500/30 text-purple-300 border border-purple-400/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🧪 Chemistry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSelectElective('ICT')}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                      physicalScienceElective === 'ICT'
+                        ? 'bg-pink-500/30 text-pink-300 border border-pink-400/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    💻 ICT
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
+              Ready for high-yield revision today?
+            </h1>
+
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              Subjects:{' '}
+              <span className="text-cyan-300 font-semibold">
+                {streamSubjectMetas.map((s) => s.name).join(' • ')}
+              </span>
+              . Today is <strong className="text-white">{todayDayOfWeek}</strong> ({getFormattedDateDisplay(todayStr)}). You have{' '}
+              <strong className="text-cyan-300">{todayBlocks.length} study blocks</strong> planned totaling{' '}
+              <strong className="text-cyan-300">{todayHoursFormatted} hours</strong>.
+            </p>
+          </div>
+
+          {/* Quick Navigation Action Cards */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => onNavigate('timetable')}
+              className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-xs font-bold transition shadow-[0_0_20px_rgba(107,78,255,0.4)] hover:scale-105 active:scale-95 cursor-pointer min-h-[48px]"
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Open Timetable</span>
+              <ArrowRight className="w-4 h-4 ml-0.5" />
+            </button>
+
+            <button
+              onClick={() => onNavigate('daily')}
+              className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white text-xs font-bold transition cursor-pointer min-h-[48px]"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>Daily Tasks</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('topics')}
+              className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white text-xs font-bold transition cursor-pointer min-h-[48px]"
+            >
+              <BookOpen className="w-4 h-4 text-cyan-400" />
+              <span>Syllabus Tracker</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Overview Metric Cards Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Metric 1: Today's Tasks */}
+        <div
+          onClick={() => onNavigate('daily')}
+          className="rounded-2xl border border-white/10 bg-[#161831]/80 hover:border-emerald-400/40 p-4 sm:p-5 backdrop-blur-md shadow-lg transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Daily Tasks Done</span>
+            <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 group-hover:scale-110 transition">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-black text-white">
+              {completedTodayTasks}/{totalTodayTasks}
+            </span>
+            <span className="text-xs font-bold text-emerald-400">({todayTaskPercent}%)</span>
+          </div>
+          <div className="mt-2 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+            <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${todayTaskPercent}%` }} />
+          </div>
+        </div>
+
+        {/* Metric 2: Today's Study Hours */}
+        <div
+          onClick={() => onNavigate('timetable')}
+          className="rounded-2xl border border-white/10 bg-[#161831]/80 hover:border-cyan-400/40 p-4 sm:p-5 backdrop-blur-md shadow-lg transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Today's Study Hours</span>
+            <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 group-hover:scale-110 transition">
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-black text-white">{todayHoursFormatted}</span>
+            <span className="text-xs font-bold text-slate-400">hrs planned</span>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-400">
+            {todayBlocks.length} scheduled revision blocks
+          </div>
+        </div>
+
+        {/* Metric 3: Overall Syllabus Covered */}
+        <div
+          onClick={() => onNavigate('topics')}
+          className="rounded-2xl border border-white/10 bg-[#161831]/80 hover:border-purple-400/40 p-4 sm:p-5 backdrop-blur-md shadow-lg transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Syllabus Covered</span>
+            <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 group-hover:scale-110 transition">
+              <BookOpen className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-black text-white">{overallSyllabusPercent}%</span>
+            <span className="text-xs font-bold text-purple-300">
+              {completedTopicsCount}/{totalTopicsCount}
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-purple-500 to-cyan-400 rounded-full" style={{ width: `${overallSyllabusPercent}%` }} />
+          </div>
+        </div>
+
+        {/* Metric 4: Exam Readiness & Consistency */}
+        <div
+          onClick={() => onNavigate('daily')}
+          className="rounded-2xl border border-white/10 bg-[#161831]/80 hover:border-amber-400/40 p-4 sm:p-5 backdrop-blur-md shadow-lg transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Study Streak</span>
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 group-hover:scale-110 transition">
+              <Flame className="w-4 h-4 fill-amber-400/50" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-black text-amber-300">
+              🔥 {streakData.currentStreak} {streakData.currentStreak === 1 ? 'Day' : 'Days'}
+            </span>
+            <span className="text-xs font-bold text-amber-400/80">
+              {streakData.isCompletedToday ? 'Done today! 🎉' : streakData.currentStreak > 0 ? 'Active' : 'Start Today!'}
+            </span>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-400 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <Trophy className="w-3 h-3 text-amber-400" />
+              <span>Best: {streakData.bestStreak} days</span>
+            </span>
+            <span className="text-slate-400 text-[10px] font-medium">
+              {streakData.isCompletedToday ? 'Protected ✓' : 'Complete 1 task today'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Two-Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left 2 Columns: Today's Tasks & Next Study Block */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Today's Tasks Section */}
+          <div className="rounded-3xl border border-white/10 bg-[#161831]/80 p-5 sm:p-6 backdrop-blur-xl shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Today's Revision Tasks</h3>
+                  <p className="text-xs text-slate-400">
+                    {completedTodayTasks} of {totalTodayTasks} topics completed today
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => onNavigate('daily')}
+                className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer min-h-[44px] px-2"
+              >
+                <span>View All</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* List of Tasks */}
+            {todayTasksList.length === 0 ? (
+              <div className="p-6 rounded-2xl bg-white/5 border border-white/5 text-center text-slate-400">
+                <p className="text-xs sm:text-sm font-semibold text-slate-300">No tasks logged yet for today.</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Import scheduled study blocks from your timetable or add custom past paper goals.
+                </p>
+                <button
+                  onClick={() => onNavigate('daily')}
+                  className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-xs font-bold transition cursor-pointer min-h-[40px]"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Open Daily Planner</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {todayTasksList.slice(0, 4).map((task) => (
+                  <div
+                    key={task.id}
+                    onClick={() => onToggleTask(task.id)}
+                    className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 cursor-pointer group ${
+                      task.isCompleted
+                        ? 'border-emerald-500/30 bg-emerald-950/15 opacity-70'
+                        : 'border-white/10 bg-white/5 hover:border-cyan-400/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="min-w-[40px] min-h-[40px] flex items-center justify-center text-cyan-400">
+                        {task.isCompleted ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-slate-400 group-hover:text-cyan-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-slate-300 mr-2">
+                          {task.subject}
+                        </span>
+                        <span
+                          className={`text-xs sm:text-sm font-medium ${
+                            task.isCompleted ? 'text-slate-400 line-through' : 'text-white'
+                          }`}
+                        >
+                          {task.title}
+                        </span>
+                      </div>
+                    </div>
+
+                    {task.estimatedMinutes && (
+                      <span className="text-[10px] text-slate-400 shrink-0 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {task.estimatedMinutes}m
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Today's Timetable Routine */}
+          <div className="rounded-3xl border border-white/10 bg-[#161831]/80 p-5 sm:p-6 backdrop-blur-xl shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">{todayDayOfWeek}'s Scheduled Timetable</h3>
+                  <p className="text-xs text-slate-400">Color-coded study slots for today</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => onNavigate('timetable')}
+                className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer min-h-[44px] px-2"
+              >
+                <span>Edit Routine</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {todayBlocks.length === 0 ? (
+              <div className="p-6 rounded-2xl bg-white/5 border border-white/5 text-center text-slate-400">
+                <p className="text-xs font-semibold text-slate-300">No timetable blocks set for {todayDayOfWeek}.</p>
+                <button
+                  onClick={() => onNavigate('timetable')}
+                  className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-xs font-bold transition cursor-pointer min-h-[40px]"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Timetable Blocks</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {todayBlocks.map((block) => (
+                  <div
+                    key={block.id}
+                    className="p-3.5 rounded-2xl border border-white/10 bg-white/5 hover:border-cyan-400/40 transition flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="font-bold text-cyan-300 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {block.startTime} – {block.endTime}
+                        </span>
+                        {block.reminderEnabled && (
+                          <span className="text-[10px] text-emerald-300 flex items-center gap-0.5">
+                            <Bell className="w-2.5 h-2.5" />
+                            <span>{block.reminderOffsetMinutes}m</span>
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-white block">{block.subject}</span>
+                      <p className="text-xs text-slate-300 line-clamp-2 mt-0.5">{block.topic}</p>
+                    </div>
+
+                    {block.notes && (
+                      <span className="mt-2 text-[10px] text-slate-400 line-clamp-1 italic">
+                        "{block.notes}"
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right 1 Column: Subject Completion & Weekly Rhythm */}
+        <div className="space-y-6">
+          {/* Subject Completion Breakdown */}
+          <div className="rounded-3xl border border-white/10 bg-[#161831]/80 p-5 sm:p-6 backdrop-blur-xl shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-purple-400" />
+                <span>Subject Syllabus Status</span>
+              </h3>
+              <button
+                onClick={() => onNavigate('topics')}
+                className="text-xs text-cyan-400 hover:text-cyan-300 font-bold"
+              >
+                Track
+              </button>
+            </div>
+
+            <div className="space-y-3.5">
+              {streamSubjectMetas.map((s) => {
+                const sProg = calculateSubjectProgression(s.name, syllabusTopics);
+                const sPercent = sProg.percentage;
+                const sDone = sProg.completedTopics;
+                const sTotal = sProg.totalTopics;
+
+                return (
+                  <div
+                    key={s.id}
+                    onClick={() => onNavigate('topics')}
+                    className="p-3 rounded-2xl border border-white/10 bg-white/5 hover:border-purple-400/40 transition cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-1.5 text-xs font-bold">
+                      <div className="flex items-center gap-2 text-white">
+                        <span>{s.icon}</span>
+                        <span>{s.name}</span>
+                      </div>
+                      <span className="text-cyan-300">{sPercent}%</span>
+                    </div>
+
+                    <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[#6B4EFF] to-cyan-400"
+                        style={{ width: `${sPercent}%` }}
+                      />
+                    </div>
+
+                    <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+                      <span>{sDone} of {sTotal} units done</span>
+                      <span className="text-slate-500">Tap to update</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Weekly Rhythm Mini View */}
+          <div className="rounded-3xl border border-white/10 bg-[#161831]/80 p-5 sm:p-6 backdrop-blur-xl shadow-xl space-y-3">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-cyan-400" />
+              <span>Weekly Revision Distribution</span>
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Planned study sessions distributed across each day of the week:
+            </p>
+
+            <div className="grid grid-cols-7 gap-1 pt-2">
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayAbbr, idx) => {
+                const fullDays: TimetableEntry['dayOfWeek'][] = [
+                  'Monday',
+                  'Tuesday',
+                  'Wednesday',
+                  'Thursday',
+                  'Friday',
+                  'Saturday',
+                  'Sunday',
+                ];
+                const dayName = fullDays[idx];
+                const count = timetableEntries.filter((e) => e.dayOfWeek === dayName).length;
+                const isToday = dayName === todayDayOfWeek;
+
+                return (
+                  <div
+                    key={dayAbbr}
+                    className={`flex flex-col items-center p-2 rounded-xl border text-center ${
+                      isToday
+                        ? 'border-cyan-400/50 bg-cyan-950/30'
+                        : 'border-white/5 bg-white/5'
+                    }`}
+                  >
+                    <span className="text-[10px] font-semibold text-slate-400">{dayAbbr}</span>
+                    <span className={`text-sm font-black my-1 ${isToday ? 'text-cyan-300' : 'text-white'}`}>
+                      {count}
+                    </span>
+                    <span className="text-[9px] text-slate-500">blocks</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

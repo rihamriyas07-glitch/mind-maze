@@ -119,8 +119,8 @@ export const Logo: React.FC<LogoProps> = ({
               Maze
             </span>
           </div>
-          <span className="text-[10px] tracking-wider uppercase font-medium text-slate-400 mt-0.5">
-            GCE A/L AI Practice
+          <span className="text-[10px] tracking-wider uppercase font-medium text-cyan-400 mt-0.5">
+            GCE A/L Study Planner
           </span>
         </div>
       )}

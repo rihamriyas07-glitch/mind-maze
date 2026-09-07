@@ -22,6 +22,9 @@ import {
   Sparkles,
   Calculator,
   Dna,
+  TrendingUp,
+  Cpu,
+  Palette,
   Award,
   Calendar,
   Layers,
@@ -30,6 +33,7 @@ import {
   ShieldCheck,
   Flame,
   BookOpen,
+  Info,
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -72,6 +76,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Status & Validation
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [showGooglePicker, setShowGooglePicker] = useState<boolean>(false);
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
 
@@ -81,6 +86,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setMode(initialMode);
       setSignUpStep(1);
       setErrorMsg(null);
+      setInfoMsg(null);
       setIsCompleted(false);
       setShowGooglePicker(false);
       if (initialStream) {
@@ -309,32 +315,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-xl rounded-3xl border border-white/15 bg-[#12142B] text-slate-100 shadow-[0_0_50px_rgba(107,78,255,0.25)] overflow-hidden my-6">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md animate-fade-in p-2 sm:p-4 flex min-h-screen items-center justify-center"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="relative w-full max-w-xl max-h-[92vh] sm:max-h-[88vh] rounded-3xl border border-white/15 bg-[#12142B] text-slate-100 shadow-[0_0_50px_rgba(107,78,255,0.25)] flex flex-col overflow-hidden m-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Glow Header Accent */}
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-cyan-400 via-[#6B4EFF] to-emerald-400" />
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-cyan-400 via-[#6B4EFF] to-emerald-400 z-20" />
 
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors z-10"
-          aria-label="Close modal"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* Mode Switcher Tabs (Sign In / Sign Up) */}
-        {!isCompleted && (
-          <div className="px-6 pt-6 pb-2">
-            <div className="flex rounded-2xl bg-white/5 p-1 border border-white/10 max-w-xs mx-auto">
+        {/* Pinned Top Header: Mode Switcher Tabs + Close Button */}
+        <div className="shrink-0 px-5 sm:px-6 pt-4 sm:pt-5 pb-3 border-b border-white/10 relative z-10 flex items-center justify-between gap-3 bg-[#12142B]/95 backdrop-blur-md">
+          {!isCompleted ? (
+            <div className="flex rounded-xl bg-white/5 p-1 border border-white/10 w-full max-w-xs">
               <button
                 type="button"
+                id="tab-auth-signin"
                 onClick={() => {
                   setMode('signin');
                   setSignUpStep(1);
                   setErrorMsg(null);
                 }}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   mode === 'signin'
                     ? 'bg-[#6B4EFF] text-white shadow-[0_0_15px_rgba(107,78,255,0.4)]'
                     : 'text-slate-400 hover:text-white'
@@ -344,11 +350,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
               <button
                 type="button"
+                id="tab-auth-signup"
                 onClick={() => {
                   setMode('signup');
                   setErrorMsg(null);
                 }}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   mode === 'signup'
                     ? 'bg-[#6B4EFF] text-white shadow-[0_0_15px_rgba(107,78,255,0.4)]'
                     : 'text-slate-400 hover:text-white'
@@ -357,14 +364,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 Create Account
               </button>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4" />
+              <span>Registration Complete</span>
+            </div>
+          )}
 
-        {/* ========================================================= */}
-        {/* GOOGLE ACCOUNT SELECTION MODAL POPUP                      */}
-        {/* ========================================================= */}
-        {showGooglePicker && (
-          <div className="p-6 sm:p-8 space-y-6">
+          {/* Close Button */}
+          <button
+            id="btn-close-auth-modal"
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+            aria-label="Close modal"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Scrollable Body: Ensures entire form & buttons are 100% visible on any screen */}
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          {/* ========================================================= */}
+          {/* GOOGLE ACCOUNT SELECTION MODAL POPUP                      */}
+          {/* ========================================================= */}
+          {showGooglePicker && (
+            <div className="p-5 sm:p-7 space-y-5">
             <div className="text-center space-y-2">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10 border border-white/20 mb-2">
                 <svg className="w-6 h-6" viewBox="0 0 24 24">
@@ -418,17 +443,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const customEmail = prompt('Enter your Google email address:') || 'scholar@gmail.com';
-                  const customName = customEmail.split('@')[0];
+                  const fallbackEmail = email.trim() || 'scholar@gmail.com';
+                  const customName = fallbackEmail.split('@')[0];
                   handleGoogleAccountSelect({
                     name: customName.charAt(0).toUpperCase() + customName.slice(1),
-                    email: customEmail,
+                    email: fallbackEmail,
                     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
                   });
                 }}
                 className="w-full py-3 px-4 rounded-xl border border-dashed border-white/20 text-xs text-slate-400 hover:text-white hover:border-white/40 text-center transition-colors"
               >
-                + Use another Google account
+                + Connect with active Google account
               </button>
             </div>
 
@@ -446,7 +471,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* SIGN IN VIEW                                              */}
         {/* ========================================================= */}
         {mode === 'signin' && !showGooglePicker && (
-          <div className="p-6 sm:p-8 space-y-6">
+          <div className="p-5 sm:p-7 space-y-5">
             <div className="text-center space-y-1.5">
               <h2 className="text-2xl font-black text-white">Welcome Back</h2>
               <p className="text-xs text-slate-300">
@@ -457,6 +482,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {errorMsg && (
               <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold">
                 {errorMsg}
+              </div>
+            )}
+
+            {infoMsg && (
+              <div className="p-3 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-semibold flex items-center gap-2">
+                <Info className="w-4 h-4 shrink-0" />
+                <span>{infoMsg}</span>
               </div>
             )}
 
@@ -518,7 +550,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <label className="text-xs font-semibold text-slate-300">Password</label>
                   <button
                     type="button"
-                    onClick={() => alert('Password reset link sent to your email (simulated).')}
+                    onClick={() => {
+                      setInfoMsg(`Password reset link sent to ${email.trim() ? email.trim() : 'your email address'} (simulated).`);
+                    }}
                     className="text-[11px] text-cyan-400 hover:underline"
                   >
                     Forgot password?
@@ -602,7 +636,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* SIGN UP VIEW (WITH STREAM & PREFERENCES IN THE PROCESS!)  */}
         {/* ========================================================= */}
         {mode === 'signup' && !showGooglePicker && !isCompleted && (
-          <div className="p-6 sm:p-8 space-y-6">
+          <div className="p-5 sm:p-7 space-y-5">
             {/* Multi-Step Wizard Indicator */}
             <div>
               <div className="flex items-center justify-between text-xs font-semibold mb-2">
@@ -782,31 +816,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => handleStreamSelect('Maths')}
-                    className={`p-4 rounded-2xl border text-left transition-all relative ${
+                    className={`p-3.5 rounded-2xl border text-left transition-all relative ${
                       stream === 'Maths'
                         ? 'border-[#6B4EFF] bg-[#6B4EFF]/20 shadow-[0_0_15px_rgba(107,78,255,0.3)] ring-1 ring-[#6B4EFF]'
                         : 'border-white/10 bg-white/5 hover:border-white/20'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="p-2.5 rounded-xl border border-blue-500/40 bg-blue-950/40 text-blue-400">
-                        <Calculator className="w-5 h-5" />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="p-2 rounded-xl border border-blue-500/40 bg-blue-950/40 text-blue-400">
+                        <Calculator className="w-4 h-4" />
                       </div>
                       {stream === 'Maths' && (
-                        <div className="w-5 h-5 rounded-full bg-[#6B4EFF] text-white flex items-center justify-center">
-                          <Check className="w-3.5 h-3.5" />
+                        <div className="w-4 h-4 rounded-full bg-[#6B4EFF] text-white flex items-center justify-center">
+                          <Check className="w-3 h-3" />
                         </div>
                       )}
                     </div>
-                    <div className="font-bold text-white text-sm">Physical Science (Maths)</div>
-                    <div className="text-[11px] text-slate-400 mt-1">
+                    <div className="font-bold text-white text-xs sm:text-sm">Physical Science (Maths)</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
                       Combined Maths, Physics, Chemistry / ICT
                     </div>
-                    <div className="mt-2 text-[10px] text-purple-300 font-semibold bg-purple-500/20 px-2 py-0.5 rounded inline-block">
+                    <div className="mt-1.5 text-[10px] text-purple-300 font-semibold bg-purple-500/20 px-2 py-0.5 rounded inline-block">
                       Engineering & Computing
                     </div>
                   </button>
@@ -814,28 +848,112 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleStreamSelect('Bio')}
-                    className={`p-4 rounded-2xl border text-left transition-all relative ${
+                    className={`p-3.5 rounded-2xl border text-left transition-all relative ${
                       stream === 'Bio'
                         ? 'border-emerald-500 bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.3)] ring-1 ring-emerald-500'
                         : 'border-white/10 bg-white/5 hover:border-white/20'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="p-2.5 rounded-xl border border-emerald-500/40 bg-emerald-950/40 text-emerald-400">
-                        <Dna className="w-5 h-5" />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="p-2 rounded-xl border border-emerald-500/40 bg-emerald-950/40 text-emerald-400">
+                        <Dna className="w-4 h-4" />
                       </div>
                       {stream === 'Bio' && (
-                        <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center">
-                          <Check className="w-3.5 h-3.5" />
+                        <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                          <Check className="w-3 h-3" />
                         </div>
                       )}
                     </div>
-                    <div className="font-bold text-white text-sm">Biological Science</div>
-                    <div className="text-[11px] text-slate-400 mt-1">
+                    <div className="font-bold text-white text-xs sm:text-sm">Biological Science</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
                       Biology, Physics, Chemistry / Agri
                     </div>
-                    <div className="mt-2 text-[10px] text-emerald-300 font-semibold bg-emerald-500/20 px-2 py-0.5 rounded inline-block">
+                    <div className="mt-1.5 text-[10px] text-emerald-300 font-semibold bg-emerald-500/20 px-2 py-0.5 rounded inline-block">
                       Medicine & Bioscience
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleStreamSelect('Commerce')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all relative ${
+                      stream === 'Commerce'
+                        ? 'border-amber-500 bg-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.3)] ring-1 ring-amber-500'
+                        : 'border-white/10 bg-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="p-2 rounded-xl border border-amber-500/40 bg-amber-950/40 text-amber-400">
+                        <TrendingUp className="w-4 h-4" />
+                      </div>
+                      {stream === 'Commerce' && (
+                        <div className="w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="font-bold text-white text-xs sm:text-sm">Commerce Stream</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Accounting, Business Studies, Economics
+                    </div>
+                    <div className="mt-1.5 text-[10px] text-amber-300 font-semibold bg-amber-500/20 px-2 py-0.5 rounded inline-block">
+                      Finance & Management
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleStreamSelect('Technology')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all relative ${
+                      stream === 'Technology'
+                        ? 'border-cyan-500 bg-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.3)] ring-1 ring-cyan-500'
+                        : 'border-white/10 bg-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="p-2 rounded-xl border border-cyan-500/40 bg-cyan-950/40 text-cyan-400">
+                        <Cpu className="w-4 h-4" />
+                      </div>
+                      {stream === 'Technology' && (
+                        <div className="w-4 h-4 rounded-full bg-cyan-500 text-white flex items-center justify-center">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="font-bold text-white text-xs sm:text-sm">Technology Stream</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Engineering Tech / Bio Tech, SFT, ICT
+                    </div>
+                    <div className="mt-1.5 text-[10px] text-cyan-300 font-semibold bg-cyan-500/20 px-2 py-0.5 rounded inline-block">
+                      Applied Tech & IT
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleStreamSelect('Arts')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all relative sm:col-span-2 ${
+                      stream === 'Arts'
+                        ? 'border-rose-500 bg-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.3)] ring-1 ring-rose-500'
+                        : 'border-white/10 bg-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="p-2 rounded-xl border border-rose-500/40 bg-rose-950/40 text-rose-400">
+                        <Palette className="w-4 h-4" />
+                      </div>
+                      {stream === 'Arts' && (
+                        <div className="w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="font-bold text-white text-xs sm:text-sm">Arts & Humanities</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Sinhala / Tamil / English, Political Science, Geography, History, Logic
+                    </div>
+                    <div className="mt-1.5 text-[10px] text-rose-300 font-semibold bg-rose-500/20 px-2 py-0.5 rounded inline-block">
+                      Law, Languages & Social Sciences
                     </div>
                   </button>
                 </div>
@@ -1089,7 +1207,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* CELEBRATION / SUCCESS STATE                               */}
         {/* ========================================================= */}
         {isCompleted && (
-          <div className="p-8 text-center space-y-4 animate-scale-up">
+          <div className="p-6 sm:p-8 text-center space-y-4 animate-scale-up">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-400 text-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.4)]">
               <Check className="w-8 h-8 stroke-[3]" />
             </div>
@@ -1104,6 +1222,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

@@ -1,122 +1,148 @@
-export type StreamType = 'Maths' | 'Bio';
-export type SyllabusType = 'current' | 'old';
-export type PaperType = 'MCQ' | 'Structured' | 'Essay';
-export type MediumType = 'English' | 'Sinhala' | 'Tamil';
+/**
+ * Mind Maze - GCE A/L Study Planner Types
+ */
 
-export type ScreenId = 
-  | 'landing'
-  | 'auth'
-  | 'onboarding'
-  | 'dashboard'
-  | 'study-plan'
-  | 'past-papers'
-  | 'practice'
-  | 'mistakes'
-  | 'targets'
-  | 'analytics';
+export type StreamType =
+  | 'Physical Science'
+  | 'Biological Science'
+  | 'Maths'
+  | 'Bio'
+  | 'Commerce'
+  | 'Technology'
+  | 'Arts';
+
+export type ScreenId = 'dashboard' | 'timetable' | 'daily' | 'topics' | 'progress';
+
+export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+
+export type TopicStatus = 'not_started' | 'in_progress' | 'completed';
+
+export type ReminderOffset = 0 | 10 | 15 | 30 | 60; // minutes before, 0 = at time
+
+export interface StreakData {
+  currentStreak: number;
+  bestStreak: number;
+  lastCompletedDate?: string;
+  completedDates: string[];
+  isCompletedToday: boolean;
+}
+
+export interface TimetableEntry {
+  id: string;
+  dayOfWeek: DayOfWeek;
+  subject: string;
+  topic: string;
+  topicId?: string;         // Link to SyllabusTopic.id
+  subtopic?: string;        // Specific subtopic name
+  targetProgress?: number;  // Planned completion percentage (0 - 100) for this block
+  isCompleted?: boolean;    // Whether this study session is finished
+  startTime: string; // "HH:MM" 24-hr format, e.g. "06:00"
+  endTime: string;   // "HH:MM" 24-hr format, e.g. "08:00"
+  color: string;     // Tailwind color key or hex, e.g. "blue", "cyan", "purple", "emerald", "amber", "rose"
+  reminderEnabled: boolean;
+  reminderOffsetMinutes: ReminderOffset;
+  notes?: string;
+  fromTaskId?: string; // Optional link to originating daily task
+}
+
+export interface DailyTask {
+  id: string;
+  date: string; // "YYYY-MM-DD"
+  title: string;
+  subject: string;
+  topicId?: string;         // Link to SyllabusTopic.id
+  topicTitle?: string;      // Cached title of the syllabus topic
+  subtopic?: string;        // Specific subtopic name
+  targetProgress?: number;  // Planned completion percentage (0 - 100) for this block
+  isCompleted: boolean;
+  completedAt?: string;
+  timeSlot?: string;
+  startTime?: string;
+  endTime?: string;
+  estimatedMinutes?: number;
+  priority: 'High' | 'Medium' | 'Low';
+  fromTimetableId?: string; // Link to originating timetable entry
+}
+
+export interface SyllabusTopic {
+  id: string;
+  subject: string;
+  unitNumber: number;
+  unitTitle: string;
+  topicTitle: string;
+  subtopics?: string[];
+  completedSubtopics?: string[]; // Array of completed subtopics (100% finished)
+  subtopicProgress?: Record<string, number>; // Progress percentage (0 - 100) for each subtopic
+  status: TopicStatus;
+  notes?: string;
+  isCustom?: boolean;
+}
+
+export interface SubjectMeta {
+  id: string;
+  name: string;
+  stream: StreamType | 'Both';
+  icon: string;
+  color: string; // e.g. 'cyan', 'indigo', 'purple', 'emerald', 'amber', 'rose'
+  badgeBg: string;
+  borderColor: string;
+  textColor: string;
+  totalTopicsCount?: number;
+}
+
+export interface UserSettings {
+  stream: StreamType;
+  physicalScienceElective: 'Chemistry' | 'ICT';
+  studentName: string;
+  targetExamYear: string; // e.g. "2026"
+  targetZScore?: string;
+  reminderSoundEnabled: boolean;
+  notificationsGranted: boolean;
+  hasSeenNotificationPrompt: boolean;
+  weeklyHoursGoal: number;
+}
+
+// ================= LEGACY COMPATIBILITY TYPES =================
+export type SyllabusType = 'New' | 'Old' | 'current' | 'old' | 'new' | string;
+export type MediumType = 'Sinhala' | 'English' | 'Tamil' | string;
+export type PaperType = 'MCQ' | 'Structured' | 'Essay' | string;
 
 export interface UserProfile {
   id?: string;
   name: string;
   email?: string;
   avatar?: string;
-  provider?: 'google' | 'email' | 'guest';
+  provider?: any;
   isAuthenticated?: boolean;
   stream: StreamType;
-  selectedSubjects: string[];
-  targetGrade: string; // e.g. "3 A's"
-  examDate: string; // e.g. "2026-11-25"
-  syllabus: SyllabusType;
+  syllabus?: SyllabusType;
   medium?: MediumType;
-  currentOnlyFilter: boolean;
+  targetYear?: string;
+  targetZScore?: string;
+  targetGrade?: string;
+  examDate?: string;
+  selectedSubjects?: string[];
   xp: number;
   streakDays: number;
-  streakFreezes: number;
-  dailyGoalMCQs: number;
+  streakFreezes?: number;
   dailyCompletedMCQs: number;
-  level: number;
-}
-
-export interface QuestionOption {
-  id: string; // 'A' | 'B' | 'C' | 'D' or '1' | '2' | '3' | '4'
-  text: string;
-  isCorrect: boolean;
-}
-
-export interface TryExample {
-  id: string;
-  title: string;
-  summary: string;
-  questionText: string;
-  options: QuestionOption[];
-  solution: string;
-}
-
-export interface QuestionExplanation {
-  correctOptionId: string;
-  correctOptionText: string;
-  conceptNote: string; // 3-4 lines
-  stepByStep: string[]; // Numbered list
-  tryExamples: TryExample[];
-  keyFormula?: string;
-  commonPitfall?: string;
-}
-
-export interface Question {
-  id: string;
-  subject: string;
-  stream: StreamType;
-  topic: string;
-  subtopic?: string;
-  paperYear: number;
-  syllabus: SyllabusType;
-  difficulty: 'Easy' | 'Medium' | 'Hard';
-  repeatFrequency: string; // e.g. "Appeared in 2016, 2019, 2022, 2023"
-  repeatYears: number[];
-  questionText: string;
-  diagramCode?: string; // description or SVG flag
-  options: QuestionOption[];
-  explanation: QuestionExplanation;
+  dailyGoalMCQs?: number;
+  [key: string]: any;
 }
 
 export interface PastPaper {
   id: string;
-  title: string;
-  subject: string;
-  stream: StreamType;
   year: number;
-  syllabus: SyllabusType;
-  type: PaperType;
+  subject: string;
+  paperType?: PaperType;
   medium: MediumType;
-  topicTags: string[];
-  hasExplanation: boolean;
-  questionCount: number;
-  durationMinutes: number;
-  downloadSize: string;
-  isModelPaper?: boolean;
-}
-
-export interface MistakeItem {
-  id: string;
-  question: Question;
-  userSelectedOptionId: string;
-  savedAt: string;
-  reviewCount: number;
-  isMastered: boolean;
-  userNotes?: string;
-}
-
-export interface TargetCard {
-  id: string;
-  timeframe: 'Daily' | 'Weekly' | 'Monthly';
+  syllabus: SyllabusType;
   title: string;
-  description: string;
-  current: number;
-  target: number;
-  unit: string;
-  xpReward: number;
-  completed: boolean;
-  category: 'MCQs' | 'Revision' | 'Past Paper' | 'Mistakes';
+  questionsCount?: number;
+  durationMinutes?: number;
+  pdfUrl?: string;
+  markingSchemeUrl?: string;
+  [key: string]: any;
 }
 
 export interface MilestoneBadge {
@@ -125,83 +151,100 @@ export interface MilestoneBadge {
   description: string;
   icon: string;
   unlocked: boolean;
-  unlockedAt?: string;
-  progress: number;
-  maxProgress: number;
-  category: 'Streak' | 'Accuracy' | 'Volume' | 'Mastery';
+  progress?: number;
+  maxProgress?: number;
+  [key: string]: any;
+}
+
+export interface TargetCard {
+  id: string;
+  title: string;
+  targetValue?: string;
+  currentValue?: string;
+  deadline?: string;
+  timeframe?: string;
+  [key: string]: any;
 }
 
 export interface TopicMastery {
-  topic: string;
-  subject: string;
-  masteryPercentage: number;
-  attempted: number;
-  correct: number;
-  status: 'Weak' | 'Moderate' | 'Strong';
-  repeatFrequency: string;
-  repeatYears: number[];
-  predictedLikelihood: 'Very High' | 'High' | 'Moderate';
-  lastPracticed: string;
-}
-
-export interface StudyPlanPhase {
-  phaseNumber: number;
-  title: string;
-  duration: string;
-  focus: string;
-  topics: string[];
-  targetPapers: string;
-  status: 'completed' | 'in-progress' | 'upcoming';
-}
-
-export interface StudyPlan {
-  id: string;
-  title: string;
-  tagline: string;
-  description: string;
-  durationDays: number;
-  intensity: 'High Intensity' | 'Balanced' | 'Rapid Revision' | 'Comprehensive' | 'Structured Sprint';
-  stream: StreamType;
-  recommendedDailyHours: number;
-  dailyMCQTarget: number;
-  progressPercentage: number;
-  currentDay: number;
-  isActive: boolean;
-  phases: StudyPlanPhase[];
-  keyOutcomes: string[];
-  badgeUnlockTitle: string;
-}
-
-export interface TimetableSlot {
-  id: string;
-  dayOfWeek: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
-  timeSlot: 'Morning (06:00 - 08:00)' | 'Afternoon (14:00 - 16:30)' | 'Evening (18:00 - 20:00)' | 'Night (20:30 - 22:30)' | 'Custom';
-  startTime: string;
-  endTime: string;
   subject: string;
   topic: string;
-  activityType: 'Theory Revision' | 'Past Paper MCQ Sprint' | 'Mistake Analysis' | 'Formula Recall' | 'Timed Model Paper';
-  isCompleted: boolean;
-  targetMCQCount?: number;
-  notes?: string;
+  masteryPercentage?: any;
+  mcqsAttempted?: number;
+  correctPercentage?: number;
+  attempted?: number;
+  correct?: number;
+  predictedLikelihood?: any;
+  repeatYears?: any;
+  [key: string]: any;
+}
+
+export interface MistakeItem {
+  id: string;
+  subject?: string;
+  topic?: string;
+  questionText?: string;
+  yourAnswer?: string;
+  correctAnswer?: string;
+  explanation?: string;
+  reviewStatus?: 'Needs Review' | 'Reviewed' | 'Mastered' | string;
+  dateAdded?: string;
+  question?: any;
+  [key: string]: any;
 }
 
 export interface DailyCoverTopic {
   id: string;
-  dateStr: string; // YYYY-MM-DD
-  dayLabel: string; // e.g. "Today", "Tomorrow", "Day 14"
   subject: string;
   topic: string;
-  syllabusUnit: string;
-  syllabusCode: string;
-  subtopics: string[];
-  repeatProbability: number; // e.g. 96
-  repeatYears: number[];
-  examTips: string;
-  targetMCQs: number;
-  completedMCQs: number;
-  isTheoryReviewed: boolean;
-  isFormulasLocked: boolean;
-  isMCQsCompleted: boolean;
-  status: 'completed' | 'in-progress' | 'scheduled';
+  isCompleted?: boolean;
+  [key: string]: any;
 }
+
+export interface StudyPlan {
+  id: string;
+  stream: StreamType;
+  title: string;
+  description: string;
+  durationWeeks?: number;
+  [key: string]: any;
+}
+
+export interface TimetableSlot {
+  id: string;
+  day?: DayOfWeek;
+  dayOfWeek?: DayOfWeek;
+  subject: string;
+  topic: string;
+  timeSlot: string;
+  startTime?: string;
+  endTime?: string;
+  color?: string;
+  notes?: string;
+  reminderEnabled?: boolean;
+  reminderOffsetMinutes?: number;
+  activityType?: string;
+  [key: string]: any;
+}
+
+export interface Question {
+  id: string;
+  subject: string;
+  topic: string;
+  year?: number;
+  questionNumber?: number;
+  questionText: string;
+  options: any;
+  correctOptionIndex?: number;
+  explanation: any;
+  diagramSvg?: string;
+  [key: string]: any;
+}
+
+export interface TryExample {
+  id: string;
+  title: string;
+  description?: string;
+  [key: string]: any;
+}
+

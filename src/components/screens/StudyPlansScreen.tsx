@@ -44,8 +44,13 @@ import {
   Check,
   Save,
 } from 'lucide-react';
-import { ScreenId, StudyPlan, TimetableSlot, DailyCoverTopic, UserProfile } from '../../types';
-import { INITIAL_STUDY_PLANS, INITIAL_TIMETABLE, INITIAL_DAILY_TOPICS } from '../../data/mockStudyData';
+import { ScreenId, StudyPlan, TimetableSlot, DailyCoverTopic, UserProfile, StreamType } from '../../types';
+import {
+  ALL_STREAM_STUDY_PLANS,
+  ALL_STREAM_TIMETABLES,
+  ALL_STREAM_DAILY_TOPICS,
+  GCE_AL_STREAMS,
+} from '../../data/streamStudyData';
 
 interface StudyPlansScreenProps {
   userProfile: UserProfile;
@@ -53,6 +58,8 @@ interface StudyPlansScreenProps {
   onStartSpecificQuiz?: (questionId?: string, topic?: string) => void;
   onUpdateXP?: (points: number) => void;
   onUpdateProfile?: (partial: Partial<UserProfile>) => void;
+  initialTab?: TabType;
+  onTabChange?: (tab: TabType) => void;
 }
 
 type TabType = 'plans' | 'timetable' | 'daily-topics';
@@ -63,12 +70,34 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
   onStartSpecificQuiz,
   onUpdateXP,
   onUpdateProfile,
+  initialTab,
+  onTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('plans');
-  const [studyPlans, setStudyPlans] = useState<StudyPlan[]>(INITIAL_STUDY_PLANS);
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'plans');
+
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  const handleTabSwitch = (tab: TabType) => {
+    setActiveTab(tab);
+    if (onTabChange) onTabChange(tab);
+  };
+  const [selectedStream, setSelectedStream] = useState<StreamType>(() => {
+    return userProfile.stream || 'Maths';
+  });
+
+  const [studyPlans, setStudyPlans] = useState<StudyPlan[]>(() => {
+    const s = userProfile.stream || 'Maths';
+    return ALL_STREAM_STUDY_PLANS[s] || ALL_STREAM_STUDY_PLANS.Maths;
+  });
+
   const [timetable, setTimetable] = useState<TimetableSlot[]>(() => {
+    const s = userProfile.stream || 'Maths';
     try {
-      const saved = localStorage.getItem('al_physics_timetable');
+      const saved = localStorage.getItem(`al_timetable_${s}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -76,18 +105,56 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
     } catch (e) {
       // ignore
     }
-    return INITIAL_TIMETABLE;
+    return ALL_STREAM_TIMETABLES[s] || ALL_STREAM_TIMETABLES.Maths;
   });
-  const [dailyTopics, setDailyTopics] = useState<DailyCoverTopic[]>(INITIAL_DAILY_TOPICS);
 
-  // Sync timetable to localStorage
+  const [dailyTopics, setDailyTopics] = useState<DailyCoverTopic[]>(() => {
+    const s = userProfile.stream || 'Maths';
+    return ALL_STREAM_DAILY_TOPICS[s] || ALL_STREAM_DAILY_TOPICS.Maths;
+  });
+
+  const [timerToast, setTimerToast] = useState<string | null>(null);
+
+  // Sync timetable to localStorage per stream
   useEffect(() => {
     try {
-      localStorage.setItem('al_physics_timetable', JSON.stringify(timetable));
+      localStorage.setItem(`al_timetable_${selectedStream}`, JSON.stringify(timetable));
     } catch (e) {
       // ignore
     }
-  }, [timetable]);
+  }, [timetable, selectedStream]);
+
+  const currentStreamInfo = GCE_AL_STREAMS.find((s) => s.id === selectedStream) || GCE_AL_STREAMS[0];
+
+  const handleSelectStream = (newStream: StreamType) => {
+    setSelectedStream(newStream);
+    setStudyPlans(ALL_STREAM_STUDY_PLANS[newStream] || ALL_STREAM_STUDY_PLANS.Maths);
+
+    let streamTimetable = ALL_STREAM_TIMETABLES[newStream] || ALL_STREAM_TIMETABLES.Maths;
+    try {
+      const saved = localStorage.getItem(`al_timetable_${newStream}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          streamTimetable = parsed;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    setTimetable(streamTimetable);
+
+    const streamTopics = ALL_STREAM_DAILY_TOPICS[newStream] || ALL_STREAM_DAILY_TOPICS.Maths;
+    setDailyTopics(streamTopics);
+    if (streamTopics[0]) {
+      setSelectedTopicDate(streamTopics[0].dateStr);
+    }
+    setSubjectFilter('All');
+
+    if (onUpdateProfile) {
+      onUpdateProfile({ stream: newStream });
+    }
+  };
 
   // Selected Day for Timetable
   const daysOfWeek: TimetableSlot['dayOfWeek'][] = [
@@ -115,7 +182,11 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
   const [clipboardToast, setClipboardToast] = useState(false);
 
   // Selected Date/Day for Daily Cover Topics
-  const [selectedTopicDate, setSelectedTopicDate] = useState<string>('2026-09-03');
+  const [selectedTopicDate, setSelectedTopicDate] = useState<string>(() => {
+    const s = userProfile.stream || 'Maths';
+    const topics = ALL_STREAM_DAILY_TOPICS[s] || ALL_STREAM_DAILY_TOPICS.Maths;
+    return topics[0]?.dateStr || '2026-09-04';
+  });
 
   // Add Custom Timetable Slot Modal State
   const [isAddSlotModalOpen, setIsAddSlotModalOpen] = useState(false);
@@ -151,7 +222,8 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
     } else if (timeLeft === 0 && isTimerRunning) {
       setIsTimerRunning(false);
       if (onUpdateXP) onUpdateXP(60);
-      alert('🎉 Study Sprint Completed! +60 XP earned towards your A/L target.');
+      setTimerToast('🎉 Study Sprint Completed! +60 XP earned towards your GCE A/L target.');
+      setTimeout(() => setTimerToast(null), 6000);
     }
     return () => {
       if (interval) clearInterval(interval);
@@ -273,16 +345,17 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
 
   // Reset timetable back to initial template
   const handleResetTimetable = () => {
-    if (window.confirm('Reset timetable back to the standard GCE A/L schedule template? Any custom edits you made will be restored to defaults.')) {
-      setTimetable(INITIAL_TIMETABLE);
-      try {
-        localStorage.removeItem('al_physics_timetable');
-      } catch (e) {
-        // ignore
-      }
-      setSelectedRowId(INITIAL_TIMETABLE[0]?.id || null);
-      setActiveCell({ slotId: INITIAL_TIMETABLE[0]?.id || '', colKey: 'topic' });
+    const defaultTimetable = ALL_STREAM_TIMETABLES[selectedStream] || ALL_STREAM_TIMETABLES.Maths;
+    setTimetable(defaultTimetable);
+    try {
+      localStorage.removeItem(`al_timetable_${selectedStream}`);
+    } catch (e) {
+      // ignore
     }
+    setSelectedRowId(defaultTimetable[0]?.id || null);
+    setActiveCell({ slotId: defaultTimetable[0]?.id || '', colKey: 'topic' });
+    setTimerToast(`Timetable reset to the standard ${currentStreamInfo.name} template.`);
+    setTimeout(() => setTimerToast(null), 4000);
   };
 
   // Export to Excel compatible CSV
@@ -503,7 +576,21 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
   };
 
   // Filtered daily cover topics
-  const filteredTopics = dailyTopics.filter((t) => t.dateStr === selectedTopicDate);
+  const availableTopicDates = Array.from(new Set(dailyTopics.map((t) => t.dateStr))).map((dStr, idx) => {
+    const match = dailyTopics.find((t) => t.dateStr === dStr);
+    return {
+      dateStr: dStr,
+      label: match?.dayLabel || `Day ${idx + 1}`,
+      badge: idx === 0 ? 'Today' : idx === 1 ? 'Tomorrow' : null,
+    };
+  });
+
+  const effectiveTopicDate =
+    dailyTopics.some((t) => t.dateStr === selectedTopicDate)
+      ? selectedTopicDate
+      : dailyTopics[0]?.dateStr || '2026-09-04';
+
+  const filteredTopics = dailyTopics.filter((t) => t.dateStr === effectiveTopicDate);
   const totalCoveredForDate = filteredTopics.filter((t) => t.status === 'completed').length;
 
   return (
@@ -604,10 +691,90 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
         </div>
       </div>
 
+      {/* Timer Toast Notification */}
+      {timerToast && (
+        <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/80 p-4 text-white shadow-2xl flex items-center justify-between gap-4 animate-fade-in">
+          <div className="flex items-center gap-3">
+            <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+            </span>
+            <div>
+              <p className="text-sm font-bold text-emerald-200">{timerToast}</p>
+              <p className="text-xs text-slate-300">Great session! Take a 5-minute break or log questions into your Mistake Notebook.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setTimerToast(null)}
+            className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 font-semibold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* GCE A/L Stream Selector Bar */}
+      <div className="rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-5 backdrop-blur-md space-y-3 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4" />
+              <span>GCE A/L Stream Selection</span>
+            </span>
+            <span className="text-[11px] text-slate-400 hidden sm:inline">• Choose your A/L track to switch plans, timetables & syllabus</span>
+          </div>
+          <div className="text-xs font-semibold text-slate-300 flex items-center gap-2">
+            <span className="text-slate-400">Selected Stream:</span>
+            <span className="font-bold text-white px-2.5 py-0.5 rounded-md bg-[#6B4EFF]/25 border border-[#8B5CF6]/40 flex items-center gap-1.5">
+              <span>{currentStreamInfo.icon}</span>
+              <span>{currentStreamInfo.name}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Stream Selector Buttons Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+          {GCE_AL_STREAMS.map((st) => {
+            const isSelected = selectedStream === st.id;
+            return (
+              <button
+                key={st.id}
+                onClick={() => handleSelectStream(st.id)}
+                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                  isSelected
+                    ? `bg-gradient-to-b from-[#6B4EFF]/30 to-[#12142E] ${st.borderColor} shadow-lg shadow-purple-900/30 ring-2 ring-cyan-400/50`
+                    : 'bg-black/20 border-white/5 hover:border-white/20 hover:bg-white/5 text-slate-300'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1 w-full">
+                  <span className="text-base">{st.icon}</span>
+                  <span className={`text-xs font-black ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                    {st.id === 'Maths' ? 'Physical Science' : st.id === 'Bio' ? 'Biological Science' : `${st.id} Stream`}
+                  </span>
+                  {isSelected ? (
+                    <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse ml-auto" />
+                  ) : null}
+                </div>
+                <div className="text-[10px] text-slate-400 line-clamp-1">
+                  {st.subjects.slice(0, 3).join(', ')}
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[9px]">
+                  <span className={`font-semibold ${isSelected ? st.textColor : 'text-slate-400'}`}>
+                    {st.badge}
+                  </span>
+                  <span className={`px-1.5 py-0.2 rounded font-mono ${isSelected ? 'bg-white/10 text-white font-bold' : 'text-slate-500'}`}>
+                    {isSelected ? 'Active' : 'Select'}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Main Tab Navigation Buttons */}
       <div className="flex flex-wrap items-center gap-3 p-1.5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
         <button
-          onClick={() => setActiveTab('plans')}
+          onClick={() => handleTabSwitch('plans')}
           id="tab-study-plans"
           className={`flex-1 min-w-[140px] py-3 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'plans'
@@ -620,7 +787,7 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('timetable')}
+          onClick={() => handleTabSwitch('timetable')}
           id="tab-timetables"
           className={`flex-1 min-w-[140px] py-3 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'timetable'
@@ -633,7 +800,7 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('daily-topics')}
+          onClick={() => handleTabSwitch('daily-topics')}
           id="tab-daily-cover-topics"
           className={`flex-1 min-w-[140px] py-3 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'daily-topics'
@@ -849,11 +1016,11 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
         <div className="space-y-6 animate-fade-in">
           {/* Day Selector & Action Bar */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            {/* Days of Week Pills + All Week */}
-            <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+            {/* Days of Week Pills + All Week (Horizontally scrollable on mobile, flex on desktop) */}
+            <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md overflow-x-auto max-w-full">
               <button
                 onClick={() => setSelectedDay('All')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   selectedDay === 'All'
                     ? 'bg-[#6B4EFF] text-white shadow-md'
                     : 'text-slate-300 hover:bg-white/10'
@@ -878,7 +1045,7 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
                   <button
                     key={day}
                     onClick={() => setSelectedDay(day)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                       isSelected
                         ? 'bg-[#6B4EFF] text-white shadow-md'
                         : 'text-slate-300 hover:bg-white/10'
@@ -947,11 +1114,21 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
                 onChange={(e) => setSubjectFilter(e.target.value)}
                 className="bg-[#161831] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
               >
-                <option value="All">All Subjects</option>
-                <option value="Physics">Physics Only</option>
-                <option value="Combined Maths">Combined Maths</option>
-                <option value="Chemistry">Chemistry</option>
+                <option value="All">All Stream Subjects</option>
+                {currentStreamInfo.subjects.map((sub) => (
+                  <option key={sub} value={sub}>{sub}</option>
+                ))}
               </select>
+
+              {/* Print / Save Timetable */}
+              <button
+                onClick={() => window.print()}
+                className="py-2 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer border border-white/10"
+                title="Print or Save Timetable as PDF"
+              >
+                <Download className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Print / PDF</span>
+              </button>
 
               {/* Add Slot button */}
               <button
@@ -1904,15 +2081,8 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
           {/* Day Picker Strip */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
-              {[
-                { dateStr: '2026-09-03', label: "Today (Day 14)", badge: 'Current' },
-                { dateStr: '2026-09-04', label: "Tomorrow (Day 15)", badge: null },
-                { dateStr: '2026-09-05', label: "Day 16", badge: null },
-                { dateStr: '2026-09-06', label: "Day 17", badge: null },
-                { dateStr: '2026-09-07', label: "Day 18", badge: null },
-                { dateStr: '2026-09-08', label: "Day 19", badge: null },
-              ].map((item) => {
-                const isSelected = selectedTopicDate === item.dateStr;
+              {availableTopicDates.map((item) => {
+                const isSelected = effectiveTopicDate === item.dateStr;
                 return (
                   <button
                     key={item.dateStr}
@@ -1934,13 +2104,23 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
               })}
             </div>
 
-            <button
-              onClick={() => setIsAddTopicModalOpen(true)}
-              className="py-2 px-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5 cursor-pointer shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Custom Topic</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => window.print()}
+                className="py-2 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer border border-white/10"
+                title="Print or export topic checklist"
+              >
+                <Download className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Export Checklist</span>
+              </button>
+              <button
+                onClick={() => setIsAddTopicModalOpen(true)}
+                className="py-2 px-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Custom Topic</span>
+              </button>
+            </div>
           </div>
 
           {/* Today's Coverage Progress Summary Card */}
@@ -1949,11 +2129,11 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-cyan-300 uppercase tracking-wider">
-                    Syllabus Checklist: {selectedTopicDate}
+                    Syllabus Checklist: {effectiveTopicDate}
                   </span>
                 </div>
                 <h3 className="text-lg font-bold text-white">
-                  High-Yield Focus for {selectedTopicDate === '2026-09-03' ? "Today" : selectedTopicDate}
+                  High-Yield Focus for {availableTopicDates.find(d => d.dateStr === effectiveTopicDate)?.label || effectiveTopicDate}
                 </h3>
                 <p className="text-xs text-slate-300 max-w-xl">
                   Core syllabus topics mapped across past examination papers with formulas and structured review.
@@ -2175,11 +2355,9 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
                     onChange={(e) => setNewSlotSubject(e.target.value)}
                     className="w-full bg-[#0D0E21] border border-white/10 rounded-xl px-3 py-2 text-white"
                   >
-                    <option value="Physics">Physics</option>
-                    <option value="Combined Maths">Combined Maths</option>
-                    <option value="Chemistry">Chemistry</option>
-                    <option value="Biology">Biology</option>
-                    <option value="ICT">ICT</option>
+                    {currentStreamInfo.subjects.map((sub) => (
+                      <option key={sub} value={sub}>{sub}</option>
+                    ))}
                   </select>
                 </div>
               </div>
