@@ -49,6 +49,7 @@ import { TopicTracker } from './components/topics/TopicTracker';
 import { ProgressAnalytics } from './components/progress/ProgressAnalytics';
 import {
   getInitialTimetableForStream,
+  INITIAL_SYLLABUS_TOPICS,
 } from './data/alSyllabusData';
 import {
   updateSyllabusFromBlockCompletion,
@@ -496,6 +497,18 @@ export default function App() {
         } catch {
           // Pre-migration DB or offline — non-fatal, stays 0 locally.
         }
+        // Topics: wipe any prototype progress left on this shared device
+        // back to the clean catalogue (all not_started). The student's own
+        // sign-up picks — already in the cloud, or applied as pending picks
+        // just below — then become the ONLY completed topics in the tracker.
+        const cleanCatalogue: SyllabusTopic[] = INITIAL_SYLLABUS_TOPICS.map((t) => ({
+          ...t,
+          status: 'not_started' as TopicStatus,
+          completedSubtopics: [],
+          subtopicProgress: {},
+        }));
+        setSyllabusTopics(cleanCatalogue);
+        saveStoredSyllabusTopics(cleanCatalogue);
       } else {
         if (cloud.hasTimetable) {
           setTimetableEntries(cloud.timetable);
