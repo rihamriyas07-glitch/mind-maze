@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { DailyTask, StreamType, TimetableEntry, SyllabusTopic } from '../../types';
+import { DailyTask, StreamType, SubtopicTarget, TimetableEntry, SyllabusTopic } from '../../types';
 import {
   CheckCircle2,
   Circle,
@@ -27,14 +27,16 @@ import {
   computeEndTime,
 } from '../../lib/storage';
 import { getSubjectsForStream } from '../../data/alSyllabusData';
+import { SubtopicTargetPicker } from '../common/SubtopicTargetPicker';
+import { getBlockSubtopicTargets } from '../../lib/syllabusProgression';
 
 interface DailyStudyPlannerProps {
   tasks: DailyTask[];
   timetableEntries: TimetableEntry[];
   syllabusTopics?: SyllabusTopic[];
   stream: StreamType;
+  /** Read-only elective used to resolve subjects (no picker here). */
   physicalScienceElective?: 'Chemistry' | 'ICT';
-  onSelectElective?: (elective: 'Chemistry' | 'ICT') => void;
   onToggleTask: (taskId: string) => void;
   onAddTask: (
     task: Omit<DailyTask, 'id'> & {
@@ -53,7 +55,6 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
   syllabusTopics = [],
   stream,
   physicalScienceElective = 'Chemistry',
-  onSelectElective,
   onToggleTask,
   onAddTask,
   onDeleteTask,
@@ -70,7 +71,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
   const [newTitle, setNewTitle] = useState('');
   const [newSubject, setNewSubject] = useState(availableSubjects[0]?.name || 'Physics');
   const [selectedTopicId, setSelectedTopicId] = useState('');
-  const [selectedSubtopic, setSelectedSubtopic] = useState('');
+  const [selectedTargets, setSelectedTargets] = useState<SubtopicTarget[]>([]);
   const [newEstimatedMinutes, setNewEstimatedMinutes] = useState(60);
   const [newStartTime, setNewStartTime] = useState('16:00');
   const [newEndTime, setNewEndTime] = useState('17:00');
@@ -112,11 +113,29 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
     }
   };
 
+  const handleDailyTopicChange = (topicId: string) => {
+    setSelectedTopicId(topicId);
+    setSelectedTargets([]);
+    if (topicId) {
+      const tObj = syllabusTopics.find((t) => t.id === topicId);
+      if (tObj && !newTitle.trim()) {
+        setNewTitle(`Revise ${tObj.topicTitle}`);
+      }
+    }
+  };
+
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
 
     const matchedTopic = syllabusTopics.find((t) => t.id === selectedTopicId);
+    const cleanTargets = selectedTargets
+      .filter((t) => t.subtopic.trim())
+      .map((t) => ({
+        subtopic: t.subtopic.trim(),
+        targetProgress: Math.max(0, Math.min(100, Math.round(t.targetProgress))),
+      }));
+    const first = cleanTargets[0];
 
     onAddTask({
       date: selectedDate,
@@ -124,7 +143,9 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
       subject: newSubject,
       topicId: selectedTopicId || undefined,
       topicTitle: matchedTopic?.topicTitle || undefined,
-      subtopic: selectedSubtopic || undefined,
+      subtopic: first?.subtopic,
+      targetProgress: first?.targetProgress,
+      subtopicTargets: cleanTargets.length > 0 ? cleanTargets : undefined,
       isCompleted: false,
       estimatedMinutes: newEstimatedMinutes,
       priority: newPriority,
@@ -136,7 +157,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
 
     setNewTitle('');
     setSelectedTopicId('');
-    setSelectedSubtopic('');
+    setSelectedTargets([]);
     setIsAddTaskModalOpen(false);
   };
 
@@ -402,12 +423,39 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
                           Timetable
                         </span>
                       )}
-                      {(task.topicTitle || task.subtopic) && (
-                        <span className="text-[10px] text-emerald-300 font-semibold flex items-center gap-1 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-400/30">
-                          <BookOpen className="w-2.5 h-2.5 text-emerald-300" />
-                          <span className="line-clamp-1 max-w-[140px] sm:max-w-[200px]">
-                            {task.subtopic || task.topicTitle}
-                          </span>
+                      {(task.topicTitle || getBlockSubtopicTargets(task).length > 0) && (
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          {(() => {
+                            const targets = getBlockSubtopicTargets(task);
+                            if (targets.length > 0) {
+                              return (
+                                <>
+                                  {targets.slice(0, 2).map((t) => (
+                                    <span key={t.subtopic} className="text-[10px] text-emerald-300 font-semibold flex items-center gap-1 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-400/30">
+                                      <BookOpen className="w-2.5 h-2.5 text-emerald-300" />
+                                      <span className="line-clamp-1 max-w-[140px] sm:max-w-[200px]">
+                                        {t.subtopic}
+                                      </span>
+                                      <span className="font-black text-emerald-200">• {t.targetProgress}%</span>
+                                    </span>
+                                  ))}
+                                  {targets.length > 2 && (
+                                    <span className="text-[10px] text-slate-400 font-semibold">
+                                      +{targets.length - 2} more
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            }
+                            return (
+                              <span className="text-[10px] text-emerald-300 font-semibold flex items-center gap-1 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-400/30">
+                                <BookOpen className="w-2.5 h-2.5 text-emerald-300" />
+                                <span className="line-clamp-1 max-w-[140px] sm:max-w-[200px]">
+                                  {task.topicTitle}
+                                </span>
+                              </span>
+                            );
+                          })()}
                         </span>
                       )}
                     </div>
@@ -500,7 +548,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
                     onChange={(e) => {
                       setNewSubject(e.target.value);
                       setSelectedTopicId('');
-                      setSelectedSubtopic('');
+                      setSelectedTargets([]);
                     }}
                     className="w-full rounded-xl bg-[#161831] border border-white/15 px-3 py-2.5 text-white font-medium focus:border-cyan-400 focus:outline-none text-xs"
                   >
@@ -518,117 +566,15 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
                   </select>
                 </div>
 
-                {/* Optional Link to Syllabus Topic */}
-                {(() => {
-                  const subjectSyllabusTopics = syllabusTopics.filter((t) => t.subject === newSubject);
-                  const currentTopic = subjectSyllabusTopics.find((t) => t.id === selectedTopicId);
-                  const currentTopicSubtopics = currentTopic?.subtopics || [];
-
-                  if (subjectSyllabusTopics.length === 0) return null;
-
-                  return (
-                    <div className="p-3 sm:p-3.5 rounded-2xl bg-cyan-950/20 border border-cyan-500/20 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <label className="text-cyan-300 font-semibold flex items-center gap-1.5">
-                          <BookOpen className="w-3.5 h-3.5" />
-                          <span>Link to Official Syllabus Topic (Optional)</span>
-                        </label>
-                        <span className="text-[10px] text-cyan-400">Syncs progress</span>
-                      </div>
-
-                      <select
-                        value={selectedTopicId}
-                        onChange={(e) => {
-                          const tId = e.target.value;
-                          setSelectedTopicId(tId);
-                          setSelectedSubtopic('');
-                          if (tId) {
-                            const tObj = subjectSyllabusTopics.find((t) => t.id === tId);
-                            if (tObj && !newTitle.trim()) {
-                              setNewTitle(`Revise ${tObj.topicTitle}`);
-                            }
-                          }
-                        }}
-                        className="w-full rounded-xl bg-[#161831] border border-cyan-500/30 px-3 py-2 text-white font-medium focus:border-cyan-400 focus:outline-none text-xs"
-                      >
-                        <option value="">-- No specific topic linked --</option>
-                        {subjectSyllabusTopics.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.unitNumber ? `Unit ${t.unitNumber}: ` : ''}
-                            {t.unitTitle && t.unitTitle.trim().toLowerCase() !== t.topicTitle.trim().toLowerCase()
-                              ? `${t.unitTitle} – ${t.topicTitle}`
-                              : t.topicTitle} ({t.status === 'completed' ? '✓ Completed' : t.status === 'in_progress' ? 'In Progress' : 'Not Started'})
-                          </option>
-                        ))}
-                      </select>
-
-                      {/* Subtopic Selector if topic has subtopics */}
-                      {currentTopicSubtopics.length > 0 && (() => {
-                        // Check if subtopics have group prefix (e.g. "Elasticity: 1.1 Introduction")
-                        type OptGroup = { title?: string; items: { raw: string; label: string }[] };
-                        const optGroups: OptGroup[] = [];
-                        let currentOptGroup: OptGroup | null = null;
-
-                        currentTopicSubtopics.forEach((sub) => {
-                          const colonIdx = sub.indexOf(': ');
-                          if (colonIdx > 0) {
-                            const groupName = sub.substring(0, colonIdx).trim();
-                            const itemLabel = sub.substring(colonIdx + 2).trim();
-                            if (!currentOptGroup || currentOptGroup.title !== groupName) {
-                              currentOptGroup = { title: groupName, items: [] };
-                              optGroups.push(currentOptGroup);
-                            }
-                            currentOptGroup.items.push({ raw: sub, label: itemLabel });
-                          } else {
-                            if (!currentOptGroup || currentOptGroup.title !== undefined) {
-                              currentOptGroup = { title: undefined, items: [] };
-                              optGroups.push(currentOptGroup);
-                            }
-                            currentOptGroup.items.push({ raw: sub, label: sub });
-                          }
-                        });
-
-                        return (
-                          <div className="pt-1">
-                            <label className="block text-slate-300 font-semibold mb-1">
-                              Specific Sub-Topic / Theory Concept
-                            </label>
-                            <select
-                              value={selectedSubtopic}
-                              onChange={(e) => {
-                                const sub = e.target.value;
-                                setSelectedSubtopic(sub);
-                                if (sub && (!newTitle.trim() || (currentTopic && newTitle === `Revise ${currentTopic.topicTitle}`))) {
-                                  setNewTitle(`Study: ${sub}`);
-                                }
-                              }}
-                              className="w-full rounded-xl bg-[#161831] border border-cyan-500/30 px-3 py-2 text-white font-medium focus:border-cyan-400 focus:outline-none text-xs"
-                            >
-                              <option value="">-- Entire Topic / General Revision --</option>
-                              {optGroups.map((grp, gIdx) =>
-                                grp.title ? (
-                                  <optgroup key={gIdx} label={`── ${grp.title} ──`}>
-                                    {grp.items.map((item, idx) => (
-                                      <option key={idx} value={item.raw}>
-                                        {item.label}
-                                      </option>
-                                    ))}
-                                  </optgroup>
-                                ) : (
-                                  grp.items.map((item, idx) => (
-                                    <option key={idx} value={item.raw}>
-                                      • {item.label}
-                                    </option>
-                                  ))
-                                )
-                              )}
-                            </select>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  );
-                })()}
+                {/* Syllabus topic + per-subtopic 0-100 targets */}
+                <SubtopicTargetPicker
+                  syllabusTopics={syllabusTopics}
+                  subject={newSubject}
+                  topicId={selectedTopicId}
+                  onTopicChange={handleDailyTopicChange}
+                  targets={selectedTargets}
+                  onTargetsChange={setSelectedTargets}
+                />
 
                 {/* Schedule (Start & End Time) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

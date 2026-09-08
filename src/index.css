@@ -87,6 +87,72 @@
   box-shadow: 0 0 15px -3px rgba(0, 245, 255, 0.3);
 }
 
+/* Landing page only — ambient brain-logo backdrop (decorative, non-interactive) */
+.landing-brain-glow {
+  position: absolute;
+  left: 50%;
+  top: -140px;
+  transform: translateX(-50%);
+  width: min(94vw, 720px);
+  height: min(94vw, 720px);
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(0, 245, 255, 0.22) 0%,
+    rgba(107, 78, 255, 0.24) 32%,
+    rgba(236, 72, 153, 0.14) 52%,
+    rgba(107, 78, 255, 0) 70%
+  );
+  filter: blur(56px);
+  opacity: 0.55;
+  animation: landing-brain-breathe 8s ease-in-out infinite;
+  will-change: opacity;
+}
+
+.landing-brain-logo {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  width: min(86vw, 540px);
+  height: auto;
+  opacity: 0.14;
+  user-select: none;
+  filter:
+    drop-shadow(0 0 28px rgba(0, 245, 255, 0.35))
+    drop-shadow(0 0 64px rgba(107, 78, 255, 0.45))
+    drop-shadow(0 0 110px rgba(236, 72, 153, 0.22))
+    saturate(1.25);
+  -webkit-mask-image: radial-gradient(circle at 50% 42%, black 42%, transparent 72%);
+  mask-image: radial-gradient(circle at 50% 42%, black 42%, transparent 72%);
+  animation: landing-brain-breathe 8s ease-in-out infinite;
+  will-change: opacity;
+}
+
+@keyframes landing-brain-breathe {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.18; }
+}
+
+@media (min-width: 768px) {
+  .landing-brain-glow {
+    top: -180px;
+    width: min(60vw, 860px);
+    height: min(60vw, 860px);
+  }
+  .landing-brain-logo {
+    top: -24px;
+    width: min(52vw, 640px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-brain-glow,
+  .landing-brain-logo {
+    animation: none;
+  }
+}
+
 @keyframes pulseGlow {
   0%, 100% { opacity: 0.4; transform: scale(1); }
   50% { opacity: 0.8; transform: scale(1.05); }

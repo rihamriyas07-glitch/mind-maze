@@ -1,4 +1,51 @@
 import { SyllabusTopic, TopicStatus } from '../types';
+import { INITIAL_SYLLABUS_TOPICS } from '../data/alSyllabusData';
+
+/**
+ * Build fresh topic rows marked fully completed for the given syllabus topic
+ * ids (used by the sign-up "already completed" step). Subtopics are all set
+ * to 100% so progress math starts accurately instead of from zero.
+ */
+export function buildCompletedTopicsFromIds(topicIds: string[]): SyllabusTopic[] {
+  const wanted = new Set(topicIds);
+  return INITIAL_SYLLABUS_TOPICS.filter((t) => wanted.has(t.id)).map((t) => {
+    const subs = [...(t.subtopics || [])];
+    const progress: Record<string, number> = {};
+    subs.forEach((s) => {
+      progress[s] = 100;
+    });
+    return {
+      ...t,
+      subtopics: subs,
+      completedSubtopics: subs,
+      subtopicProgress: progress,
+      status: 'completed' as TopicStatus,
+    };
+  });
+}
+
+/**
+ * Mark the given topic ids as fully completed inside an existing topic list
+ * (used when applying pending sign-up selections on first login).
+ */
+export function markTopicsCompleted(topics: SyllabusTopic[], topicIds: string[]): SyllabusTopic[] {
+  const wanted = new Set(topicIds);
+  if (wanted.size === 0) return topics;
+  return topics.map((t) => {
+    if (!wanted.has(t.id)) return t;
+    const subs = [...(t.subtopics || [])];
+    const progress: Record<string, number> = { ...(t.subtopicProgress || {}) };
+    subs.forEach((s) => {
+      progress[s] = 100;
+    });
+    return {
+      ...t,
+      completedSubtopics: subs,
+      subtopicProgress: progress,
+      status: 'completed' as TopicStatus,
+    };
+  });
+}
 
 export interface TopicProgressDetail {
   topicId: string;
@@ -193,7 +240,14 @@ export function calculateOverallStreamProgression(
 }
 
 /**
- * Updates topic and subtopic completion when a daily planner task or timetable block is toggled
+ * Updates topic and subtopic completion when a daily planner task or timetable block is toggled.
+ *
+ * Each block can target MULTIPLE subtopics, each with its own planned
+ * percentage (0 - 100) chosen via a slider in the block form.
+ * On completion the syllabus `subtopicProgress[sub]` is raised to at least
+ * the planned value (max(existing, planned)) so progress never regresses
+ * when a smaller block is completed after a larger one. Topic % is then
+ * derived as the mean of all subtopic percentages.
  */
 export function updateSyllabusFromBlockCompletion(
   topics: SyllabusTopic[],
@@ -201,7 +255,8 @@ export function updateSyllabusFromBlockCompletion(
     topicId?: string;
     topicTitle?: string;
     subtopic?: string;
-    targetProgress?: number; // 0 - 100
+    targetProgress?: number; // 0 - 100 (legacy single-target)
+    subtopicTargets?: { subtopic: string; targetProgress: number }[];
     subject?: string;
     isCompleted: boolean;
   }
@@ -210,7 +265,26 @@ export function updateSyllabusFromBlockCompletion(
   changedTopic?: SyllabusTopic;
   changeMessage?: string;
 } {
-  const { topicId, topicTitle, subtopic, targetProgress, subject, isCompleted } = opts;
+  const { topicId, topicTitle, subtopic, targetProgress, subtopicTargets, subject, isCompleted } = opts;
+
+  // Normalize to a canonical list of { subtopic, targetProgress }.
+  // Prefers the multi-target array, falls back to the legacy single fields.
+  const normalizedTargets: { subtopic: string; targetProgress: number }[] = [];
+  if (Array.isArray(subtopicTargets) && subtopicTargets.length > 0) {
+    for (const t of subtopicTargets) {
+      const name = (t?.subtopic || '').trim();
+      if (!name || name === 'All Subtopics' || name === 'General Revision') continue;
+      normalizedTargets.push({
+        subtopic: name,
+        targetProgress: Math.max(0, Math.min(100, Math.round(t.targetProgress ?? 100))),
+      });
+    }
+  } else if (subtopic && subtopic.trim() && subtopic !== 'All Subtopics' && subtopic !== 'General Revision') {
+    normalizedTargets.push({
+      subtopic: subtopic.trim(),
+      targetProgress: Math.max(0, Math.min(100, targetProgress !== undefined ? targetProgress : 100)),
+    });
+  }
 
   // Find matching topic
   let targetIndex = -1;
@@ -243,25 +317,53 @@ export function updateSyllabusFromBlockCompletion(
 
   let changeMessage = '';
 
-  if (subtopic && subtopic.trim() && subtopic !== 'All Subtopics' && subtopic !== 'General Revision') {
-    const trimmedSub = subtopic.trim();
-    const plannedVal = Math.max(0, Math.min(100, targetProgress !== undefined ? targetProgress : 100));
+  if (normalizedTargets.length > 0) {
+    // Multi-subtopic (or single-subtopic) completion path.
+    const appliedSummaries: string[] = [];
+    const resetSummaries: string[] = [];
+
+    for (const target of normalizedTargets) {
+      const trimmedSub = target.subtopic;
+      // Planned % from this block's slider (0 - 100).
+      const plannedVal = target.targetProgress;
+      // Existing stored progress so completion never moves progress backwards.
+      const existingVal = currentSubProgress[trimmedSub] !== undefined
+        ? currentSubProgress[trimmedSub]
+        : (currentCompleted.includes(trimmedSub) ? 100 : 0);
+
+      if (isCompleted) {
+        const newVal = Math.max(existingVal, plannedVal);
+        currentSubProgress[trimmedSub] = newVal;
+        if (newVal >= 100) {
+          if (!currentCompleted.includes(trimmedSub)) {
+            currentCompleted.push(trimmedSub);
+          }
+          appliedSummaries.push(`"${trimmedSub}" → 100%`);
+        } else {
+          currentCompleted = currentCompleted.filter((s) => s !== trimmedSub);
+          appliedSummaries.push(`"${trimmedSub}" → ${newVal}%`);
+        }
+      } else {
+        currentSubProgress[trimmedSub] = 0;
+        currentCompleted = currentCompleted.filter((s) => s !== trimmedSub);
+        resetSummaries.push(`"${trimmedSub}"`);
+      }
+    }
 
     if (isCompleted) {
-      currentSubProgress[trimmedSub] = plannedVal;
-      if (plannedVal >= 100) {
-        if (!currentCompleted.includes(trimmedSub)) {
-          currentCompleted.push(trimmedSub);
-        }
-        changeMessage = `Marked subtopic "${trimmedSub}" 100% complete in ${topic.topicTitle}!`;
+      if (normalizedTargets.length === 1) {
+        const only = normalizedTargets[0];
+        const finalVal = currentSubProgress[only.subtopic];
+        changeMessage = finalVal >= 100
+          ? `Marked subtopic "${only.subtopic}" 100% complete in ${topic.topicTitle}!`
+          : `Logged ${finalVal}% completion for subtopic "${only.subtopic}" in ${topic.topicTitle}!`;
       } else {
-        currentCompleted = currentCompleted.filter((s) => s !== trimmedSub);
-        changeMessage = `Logged ${plannedVal}% completion for subtopic "${trimmedSub}" in ${topic.topicTitle}!`;
+        changeMessage = `Logged ${appliedSummaries.length} subtopic targets in ${topic.topicTitle} (${appliedSummaries.join(', ')})!`;
       }
     } else {
-      currentSubProgress[trimmedSub] = 0;
-      currentCompleted = currentCompleted.filter((s) => s !== trimmedSub);
-      changeMessage = `Reset progress for subtopic "${trimmedSub}" in ${topic.topicTitle}.`;
+      changeMessage = normalizedTargets.length === 1
+        ? `Reset progress for subtopic "${normalizedTargets[0].subtopic}" in ${topic.topicTitle}.`
+        : `Reset progress for ${resetSummaries.length} subtopics in ${topic.topicTitle}.`;
     }
   } else {
     // Whole topic toggled
@@ -288,7 +390,7 @@ export function updateSyllabusFromBlockCompletion(
       return sum + p;
     }, 0);
 
-    if (totalPoints >= allSubtopics.length * 100 || (isCompleted && !subtopic)) {
+    if (totalPoints >= allSubtopics.length * 100 || (isCompleted && normalizedTargets.length === 0)) {
       newStatus = 'completed';
     } else if (totalPoints > 0) {
       newStatus = 'in_progress';
@@ -314,6 +416,32 @@ export function updateSyllabusFromBlockCompletion(
     changedTopic: updatedTopic,
     changeMessage,
   };
+}
+
+/**
+ * Normalizes any block's subtopic plan to a canonical target list.
+ * Prefers `subtopicTargets`, falls back to legacy `subtopic` + `targetProgress`.
+ */
+export function getBlockSubtopicTargets(block: {
+  subtopic?: string;
+  targetProgress?: number;
+  subtopicTargets?: { subtopic: string; targetProgress: number }[];
+}): { subtopic: string; targetProgress: number }[] {
+  if (Array.isArray(block.subtopicTargets) && block.subtopicTargets.length > 0) {
+    return block.subtopicTargets
+      .filter((t) => t?.subtopic?.trim())
+      .map((t) => ({
+        subtopic: t.subtopic.trim(),
+        targetProgress: Math.max(0, Math.min(100, Math.round(t.targetProgress ?? 100))),
+      }));
+  }
+  if (block.subtopic?.trim()) {
+    return [{
+      subtopic: block.subtopic.trim(),
+      targetProgress: Math.max(0, Math.min(100, Math.round(block.targetProgress ?? 100))),
+    }];
+  }
+  return [];
 }
 
 /**

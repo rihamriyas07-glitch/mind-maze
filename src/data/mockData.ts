@@ -7,9 +7,6 @@ export const MOCK_QUESTIONS = PHYSICS_QUESTIONS;
 export const SUBJECTS_BY_STREAM: Partial<Record<StreamType, string[]>> = {
   Maths: ['Physics', 'Combined Maths', 'Chemistry', 'ICT'],
   Bio: ['Biology', 'Chemistry', 'Physics', 'Agricultural Science'],
-  Commerce: ['Accounting', 'Business Studies', 'Economics', 'ICT'],
-  Technology: ['Engineering Technology', 'Biosystems Technology', 'Science for Technology', 'ICT'],
-  Arts: ['Sinhala / Tamil / English', 'Political Science', 'Logic & Scientific Method', 'Geography', 'History'],
 };
 
 export const INITIAL_USER_PROFILE: UserProfile = {
@@ -17,7 +14,7 @@ export const INITIAL_USER_PROFILE: UserProfile = {
   stream: 'Maths',
   selectedSubjects: ['Physics'],
   targetGrade: "3 A's",
-  examDate: '2026-11-15',
+  examDate: '2027-11-15',
   syllabus: 'current',
   currentOnlyFilter: true,
   xp: 1420,

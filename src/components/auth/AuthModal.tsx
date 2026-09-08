@@ -22,9 +22,6 @@ import {
   Sparkles,
   Calculator,
   Dna,
-  TrendingUp,
-  Cpu,
-  Palette,
   Award,
   Calendar,
   Layers,
@@ -70,7 +67,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   );
   const [medium, setMedium] = useState<MediumType>('English');
   const [targetGrade, setTargetGrade] = useState<string>("3 A's");
-  const [examDate, setExamDate] = useState<string>('2026-11-15');
+  const [examDate, setExamDate] = useState<string>('2027-11-15');
   const [syllabus, setSyllabus] = useState<SyllabusType>('current');
   const [dailyGoalMCQs, setDailyGoalMCQs] = useState<number>(20);
 
@@ -225,7 +222,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       stream: match?.stream || 'Maths',
       selectedSubjects: match?.selectedSubjects || ['Combined Maths', 'Physics', 'Chemistry'],
       targetGrade: match?.targetGrade || "3 A's",
-      examDate: match?.examDate || '2026-11-15',
+      examDate: match?.examDate || '2027-11-15',
       syllabus: match?.syllabus || 'current',
       medium: match?.medium || 'English',
       currentOnlyFilter: (match?.syllabus || 'current') === 'current',
@@ -872,90 +869,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       Medicine & Bioscience
                     </div>
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleStreamSelect('Commerce')}
-                    className={`p-3.5 rounded-2xl border text-left transition-all relative ${
-                      stream === 'Commerce'
-                        ? 'border-amber-500 bg-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.3)] ring-1 ring-amber-500'
-                        : 'border-white/10 bg-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="p-2 rounded-xl border border-amber-500/40 bg-amber-950/40 text-amber-400">
-                        <TrendingUp className="w-4 h-4" />
-                      </div>
-                      {stream === 'Commerce' && (
-                        <div className="w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center">
-                          <Check className="w-3 h-3" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="font-bold text-white text-xs sm:text-sm">Commerce Stream</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      Accounting, Business Studies, Economics
-                    </div>
-                    <div className="mt-1.5 text-[10px] text-amber-300 font-semibold bg-amber-500/20 px-2 py-0.5 rounded inline-block">
-                      Finance & Management
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleStreamSelect('Technology')}
-                    className={`p-3.5 rounded-2xl border text-left transition-all relative ${
-                      stream === 'Technology'
-                        ? 'border-cyan-500 bg-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.3)] ring-1 ring-cyan-500'
-                        : 'border-white/10 bg-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="p-2 rounded-xl border border-cyan-500/40 bg-cyan-950/40 text-cyan-400">
-                        <Cpu className="w-4 h-4" />
-                      </div>
-                      {stream === 'Technology' && (
-                        <div className="w-4 h-4 rounded-full bg-cyan-500 text-white flex items-center justify-center">
-                          <Check className="w-3 h-3" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="font-bold text-white text-xs sm:text-sm">Technology Stream</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      Engineering Tech / Bio Tech, SFT, ICT
-                    </div>
-                    <div className="mt-1.5 text-[10px] text-cyan-300 font-semibold bg-cyan-500/20 px-2 py-0.5 rounded inline-block">
-                      Applied Tech & IT
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleStreamSelect('Arts')}
-                    className={`p-3.5 rounded-2xl border text-left transition-all relative sm:col-span-2 ${
-                      stream === 'Arts'
-                        ? 'border-rose-500 bg-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.3)] ring-1 ring-rose-500'
-                        : 'border-white/10 bg-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="p-2 rounded-xl border border-rose-500/40 bg-rose-950/40 text-rose-400">
-                        <Palette className="w-4 h-4" />
-                      </div>
-                      {stream === 'Arts' && (
-                        <div className="w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center">
-                          <Check className="w-3 h-3" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="font-bold text-white text-xs sm:text-sm">Arts & Humanities</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      Sinhala / Tamil / English, Political Science, Geography, History, Logic
-                    </div>
-                    <div className="mt-1.5 text-[10px] text-rose-300 font-semibold bg-rose-500/20 px-2 py-0.5 rounded inline-block">
-                      Law, Languages & Social Sciences
-                    </div>
-                  </button>
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
@@ -1103,8 +1016,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { label: '2026 (Nov Sitting)', date: '2026-11-15' },
                       { label: '2027 (Nov Sitting)', date: '2027-11-15' },
+                      { label: '2028 (Nov Sitting)', date: '2028-11-15' },
                     ].map((item) => (
                       <button
                         key={item.label}

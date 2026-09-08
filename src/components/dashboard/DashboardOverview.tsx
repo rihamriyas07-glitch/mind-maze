@@ -22,6 +22,7 @@ import {
 import { getTodayDateString, getTodayDayOfWeek, getFormattedDateDisplay } from '../../lib/storage';
 import { getSubjectsForStream } from '../../data/alSyllabusData';
 import { playStudyChime } from '../../lib/notificationService';
+import { BrowserReenableSteps } from '../notifications/BrowserReenableSteps';
 import { PWAInstallButton } from '../PWAInstallButton';
 import {
   calculateSubjectProgression,
@@ -30,24 +31,30 @@ import {
 
 interface DashboardOverviewProps {
   stream: StreamType;
+  /** Read-only elective (no picker here; change in Settings → Study Programme). */
   physicalScienceElective?: 'Chemistry' | 'ICT';
-  onSelectElective?: (elective: 'Chemistry' | 'ICT') => void;
   timetableEntries: TimetableEntry[];
   dailyTasks: DailyTask[];
   syllabusTopics: SyllabusTopic[];
   streakData?: StreakData;
+  /** Expected A/L date "YYYY-MM-DD"; countdown hides when unset. */
+  examDate?: string | null;
+  /** Optional Z-score goal + motivation note for the goals strip. */
+  targetZScore?: string | null;
+  motivationNote?: string | null;
   notificationPermission: NotificationPermission | 'unsupported';
   onRequestNotificationPermission: () => void;
   onTestSmartReminder?: () => void;
   onTestNudge?: () => void;
   onNavigate: (screen: ScreenId) => void;
   onToggleTask: (taskId: string) => void;
+  username?: string | null;
+  onNavigateToSettings?: () => void;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   stream,
   physicalScienceElective = 'Chemistry',
-  onSelectElective,
   timetableEntries,
   dailyTasks,
   syllabusTopics,
@@ -58,6 +65,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onTestNudge,
   onNavigate,
   onToggleTask,
+  username,
+  examDate = null,
+  targetZScore = null,
+  motivationNote = null,
+  onNavigateToSettings,
 }) => {
   const todayStr = getTodayDateString();
   const todayDayOfWeek = getTodayDayOfWeek();
@@ -102,10 +114,89 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return sh * 60 + sm >= currentMinutes;
   }) || todayBlocks[0];
 
+  // A/L exam countdown (hidden until a date is set in sign-up or Settings)
+  const examCountdown = (() => {
+    if (!examDate || !/^\d{4}-\d{2}-\d{2}$/.test(examDate)) return null;
+    const [y, m, d] = examDate.split('-').map(Number);
+    const target = new Date(y, m - 1, d);
+    if (Number.isNaN(target.getTime())) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days = Math.round((target.getTime() - today.getTime()) / 86400000);
+    return { days, label: target.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }) };
+  })();
+
   return (
     <div id="dashboard-overview-view" className="space-y-6 max-w-7xl mx-auto pb-8">
-      {/* Fallback in-app reminder banner if notification permission is denied or default */}
-      {notificationPermission !== 'granted' && (
+      {/* A/L Exam Countdown — prominent, hidden when no date is set */}
+      {examCountdown && (
+        <div className="rounded-3xl border border-amber-400/40 bg-gradient-to-r from-amber-500/20 via-[#1E1835] to-[#6B4EFF]/20 p-4 sm:p-5 backdrop-blur-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[0_0_25px_rgba(245,158,11,0.15)]">
+          <div className="flex items-center gap-3">
+            <div className="text-3xl sm:text-4xl">🎯</div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                {examCountdown.label}
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-white leading-tight">
+                {examCountdown.days < 0 ? (
+                  <>Your A/L exam season is here — finish strong! 💪</>
+                ) : examCountdown.days === 0 ? (
+                  <>Your A/Ls start <span className="text-amber-300">today</span> — good luck! 🍀</>
+                ) : examCountdown.days === 1 ? (
+                  <>Only <span className="text-amber-300">1 day</span> until your A/Ls</>
+                ) : (
+                  <><span className="text-amber-300">{examCountdown.days} days</span> until your A/Ls</>
+                )}
+              </div>
+            </div>
+          </div>
+          {onNavigateToSettings && (
+            <button
+              onClick={onNavigateToSettings}
+              className="text-[11px] font-bold text-slate-300 hover:text-white underline underline-offset-2 cursor-pointer shrink-0 self-start sm:self-center"
+            >
+              Change date
+            </button>
+          )}
+        </div>
+      )}
+      {/* Goals strip — Z-score target + personal note (hidden when unset) */}
+      {(targetZScore?.trim() || motivationNote?.trim()) && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 backdrop-blur-md">
+          {targetZScore?.trim() && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white">
+              <span className="text-sm">🎯</span>
+              <span>Target: <span className="text-cyan-300">{targetZScore.trim()} Z-score</span></span>
+            </span>
+          )}
+          {motivationNote?.trim() && (
+            <span className="text-xs text-slate-300 italic leading-relaxed">
+              💬 “{motivationNote.trim()}”
+            </span>
+          )}
+        </div>
+      )}
+      {/* Notification status banners */}
+      {notificationPermission === 'denied' ? (
+        <div className="rounded-2xl border border-rose-500/40 bg-gradient-to-r from-rose-500/15 via-[#1E1835] to-purple-500/15 p-3.5 sm:p-4 backdrop-blur-md shadow-lg animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 shrink-0">
+              <BellOff className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-rose-200">
+                Reminders are blocked in your browser ⛔
+              </h4>
+              <p className="text-[11px] text-slate-300">
+                No worries — this happens with one accidental tap. Follow the steps below to turn them back on.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3">
+            <BrowserReenableSteps />
+          </div>
+        </div>
+      ) : notificationPermission !== 'granted' && (
         <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-[#1E1835] to-purple-500/15 p-3.5 sm:p-4 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg animate-fadeIn">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
@@ -113,27 +204,23 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </div>
             <div>
               <h4 className="text-xs sm:text-sm font-bold text-amber-200">
-                Timetable Reminders are currently {notificationPermission === 'denied' ? 'disabled in browser' : 'inactive'}
+                🔔 Turn on reminders to stay on track
               </h4>
               <p className="text-[11px] text-slate-300">
-                {notificationPermission === 'denied'
-                  ? 'Notifications were blocked in your browser. Mind Maze will play in-app study chimes whenever you keep this tab open.'
-                  : 'Enable browser notifications to receive motivational, progress-aware alerts before each scheduled A/L revision session.'}
+                Get reminded when it&apos;s time to study, keep your streak alive, and stay on track for your A/Ls.
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 justify-start sm:justify-end shrink-0">
-            {notificationPermission !== 'denied' && (
-              <button
-                onClick={onRequestNotificationPermission}
-                id="btn-banner-allow-notifications"
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#6B4EFF] to-[#8B5CF6] hover:from-[#7C5DFA] text-xs font-bold text-white transition shadow-md cursor-pointer min-h-[44px] flex items-center gap-1.5"
-              >
-                <Bell className="w-4 h-4" />
-                <span>Enable Notifications</span>
-              </button>
-            )}
+            <button
+              onClick={onRequestNotificationPermission}
+              id="btn-banner-allow-notifications"
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#6B4EFF] to-[#8B5CF6] hover:from-[#7C5DFA] text-xs font-bold text-white transition shadow-md cursor-pointer min-h-[44px] flex items-center gap-1.5"
+            >
+              <Bell className="w-4 h-4" />
+              <span>Enable</span>
+            </button>
             <button
               onClick={() => {
                 playStudyChime();
@@ -256,38 +343,25 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 )}
               </div>
 
-              {/* Physical Science 3rd subject toggle */}
-              {(stream === 'Physical Science' || (stream as string) === 'Maths') && onSelectElective && (
+              {/* Physical Science 3rd subject indicator (read-only; change in Settings) */}
+              {(stream === 'Physical Science' || (stream as string) === 'Maths') && (
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 border border-white/15 text-xs">
                   <span className="text-[10px] text-slate-300 font-semibold">3rd Subject:</span>
-                  <button
-                    type="button"
-                    onClick={() => onSelectElective('Chemistry')}
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                      physicalScienceElective === 'Chemistry'
-                        ? 'bg-purple-500/30 text-purple-300 border border-purple-400/40'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    🧪 Chemistry
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onSelectElective('ICT')}
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                      physicalScienceElective === 'ICT'
-                        ? 'bg-pink-500/30 text-pink-300 border border-pink-400/40'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    💻 ICT
-                  </button>
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-bold text-slate-200">
+                    {physicalScienceElective === 'ICT' ? '💻 ICT' : '🧪 Chemistry'}
+                  </span>
                 </div>
               )}
             </div>
 
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
-              Ready for high-yield revision today?
+              {username ? (
+                <>
+                  Hi, <span className="bg-gradient-to-r from-cyan-400 to-[#8B5CF6] bg-clip-text text-transparent">{username}</span>! Ready for daily revision today?
+                </>
+              ) : (
+                'Ready for daily revision today?'
+              )}
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">

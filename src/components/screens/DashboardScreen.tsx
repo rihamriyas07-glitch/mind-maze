@@ -211,7 +211,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               Welcome Back, {userProfile.name}! 👋
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
-              Your exam revision headquarters. Follow your daily study plan, check off your timetable routine, and lock down high-yield syllabus topics.
+              Your exam revision headquarters. Follow your daily study plan, check off your timetable routine, and lock down syllabus topics.
             </p>
           </div>
 
@@ -331,7 +331,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           </button>
         </div>
 
-        {/* Card 3: Today's High-Yield Cover Topic */}
+        {/* Card 3: Today's Cover Topic */}
         <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-md shadow-lg flex flex-col justify-between space-y-4 hover:border-amber-400/40 transition-colors">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -734,7 +734,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h3 className="text-base font-bold text-white">Today's High-Yield Syllabus Cover Topics</h3>
+                <h3 className="text-base font-bold text-white">Today's Syllabus Cover Topics</h3>
                 <p className="text-xs text-slate-400">Core concepts frequently tested across GCE A/L examination papers.</p>
               </div>
               <span className="text-xs text-amber-300 font-semibold bg-amber-500/15 px-3 py-1 rounded-full border border-amber-500/30">

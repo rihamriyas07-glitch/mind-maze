@@ -21,13 +21,14 @@ import { SUBJECT_METAS, getSubjectsForStream } from '../../data/alSyllabusData';
 import {
   calculateSubjectProgression,
   calculateTopicProgress,
+  getSubtopicProgressValue,
 } from '../../lib/syllabusProgression';
 
 interface TopicTrackerProps {
   topics: SyllabusTopic[];
   stream: StreamType;
+  /** Read-only elective (no picker here; change in Settings → Study Programme). */
   physicalScienceElective?: 'Chemistry' | 'ICT';
-  onSelectElective?: (elective: 'Chemistry' | 'ICT') => void;
   onUpdateTopicStatus: (topicId: string, status: TopicStatus) => void;
   onToggleSubtopic?: (topicId: string, subtopicTitle: string) => void;
   onAddCustomTopic: (topic: Omit<SyllabusTopic, 'id'>) => void;
@@ -38,7 +39,6 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
   topics,
   stream,
   physicalScienceElective = 'Chemistry',
-  onSelectElective,
   onUpdateTopicStatus,
   onToggleSubtopic,
   onAddCustomTopic,
@@ -145,47 +145,21 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
         </button>
       </div>
 
-      {/* Stream & Elective Indicator Banner */}
-      {(stream === 'Physical Science' || (stream as string) === 'Maths') && onSelectElective && (
+      {/* Stream & Elective Indicator Banner (read-only; change in Settings) */}
+      {(stream === 'Physical Science' || (stream as string) === 'Maths') && (
         <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <span className="text-sm">📐</span>
             <div>
               <span className="text-xs font-bold text-white block">Physical Science Stream</span>
               <span className="text-[11px] text-slate-400">
-                Combined Maths & Physics are compulsory. Select your 3rd elective subject:
+                Combined Maths & Physics are compulsory. Your 3rd subject:{' '}
+                <strong className="text-slate-200">
+                  {physicalScienceElective === 'ICT' ? '💻 ICT' : '🧪 Chemistry'}
+                </strong>{' '}
+                (change in Settings → Study Programme)
               </span>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              id="btn-topics-elective-chem"
-              onClick={() => onSelectElective('Chemistry')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[40px] ${
-                physicalScienceElective === 'Chemistry'
-                  ? 'bg-purple-500/30 border border-purple-400/50 text-purple-200 shadow-md'
-                  : 'bg-white/5 border border-white/10 text-slate-400 hover:text-white'
-              }`}
-            >
-              <span>🧪</span>
-              <span>Chemistry Option</span>
-            </button>
-
-            <button
-              type="button"
-              id="btn-topics-elective-ict"
-              onClick={() => onSelectElective('ICT')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[40px] ${
-                physicalScienceElective === 'ICT'
-                  ? 'bg-pink-500/30 border border-pink-400/50 text-pink-200 shadow-md'
-                  : 'bg-white/5 border border-white/10 text-slate-400 hover:text-white'
-              }`}
-            >
-              <span>💻</span>
-              <span>ICT Option</span>
-            </button>
           </div>
         </div>
       )}
@@ -404,44 +378,48 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
                   </div>
 
                   {/* Status Pills Controls (Completed, In Progress, Not Started) */}
-                  <div className="flex items-center gap-1.5 self-start sm:self-center shrink-0">
+                  {/* Wraps + short labels below 380px so 320px screens never overflow */}
+                  <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-center shrink-0">
                     {/* Completed Button */}
                     <button
                       onClick={() => onUpdateTopicStatus(topic.id, 'completed')}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[44px] ${
+                      className={`flex items-center gap-1 px-2.5 min-[380px]:px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[44px] ${
                         topic.status === 'completed'
                           ? 'bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.5)]'
                           : 'bg-white/5 text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10'
                       }`}
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Completed</span>
+                      <span className="hidden min-[380px]:inline">Completed</span>
+                      <span className="min-[380px]:hidden">Done</span>
                     </button>
 
                     {/* In Progress Button */}
                     <button
                       onClick={() => onUpdateTopicStatus(topic.id, 'in_progress')}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[44px] ${
+                      className={`flex items-center gap-1 px-2.5 min-[380px]:px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[44px] ${
                         topic.status === 'in_progress'
                           ? 'bg-amber-500 text-black font-extrabold shadow-[0_0_12px_rgba(245,158,11,0.5)]'
                           : 'bg-white/5 text-slate-400 hover:text-amber-300 hover:bg-amber-500/10'
                       }`}
                     >
                       <Clock className="w-3.5 h-3.5" />
-                      <span>In Progress</span>
+                      <span className="hidden min-[380px]:inline">In Progress</span>
+                      <span className="min-[380px]:hidden">Active</span>
                     </button>
 
                     {/* Not Started Button */}
                     <button
                       onClick={() => onUpdateTopicStatus(topic.id, 'not_started')}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[44px] ${
+                      className={`flex items-center gap-1 px-2.5 min-[380px]:px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[44px] ${
                         topic.status === 'not_started'
                           ? 'bg-slate-700 text-white border border-slate-500'
                           : 'bg-white/5 text-slate-400 hover:text-white'
                       }`}
                     >
                       <Circle className="w-3.5 h-3.5" />
-                      <span>Not Started</span>
+                      <span className="hidden min-[380px]:inline">Not Started</span>
+                      <span className="min-[380px]:hidden">Todo</span>
                     </button>
                   </div>
                 </div>
@@ -449,7 +427,6 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
                 {/* Subtopics Checklist Accordion */}
                 {topic.subtopics && topic.subtopics.length > 0 && (() => {
                   const progress = calculateTopicProgress(topic);
-                  const completedSubs = topic.completedSubtopics || [];
                   const isAllDone = topic.status === 'completed' || progress.isCompleted;
 
                   return (
@@ -505,7 +482,7 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
                           <div className="mt-3 pl-2 sm:pl-3 space-y-3 border-l-2 border-cyan-500/30 animate-fadeIn">
                             {groups.map((group, gIdx) => {
                               const groupCompletedCount = group.items.filter(
-                                (item) => isAllDone || completedSubs.includes(item.raw)
+                                (item) => isAllDone || getSubtopicProgressValue(topic, item.raw) >= 100
                               ).length;
 
                               return (
@@ -526,7 +503,9 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
 
                                   <div className={group.title ? 'space-y-1.5 pl-2' : 'space-y-1.5'}>
                                     {group.items.map((item, idx) => {
-                                      const isSubDone = isAllDone || completedSubs.includes(item.raw);
+                                      const subProgress = isAllDone ? 100 : getSubtopicProgressValue(topic, item.raw);
+                                      const isSubDone = subProgress >= 100;
+                                      const isPartial = subProgress > 0 && subProgress < 100;
 
                                       return (
                                         <div
@@ -535,6 +514,8 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
                                           className={`flex items-start justify-between p-2 rounded-xl transition cursor-pointer select-none text-xs gap-2 ${
                                             isSubDone
                                               ? 'bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15 border border-emerald-500/20'
+                                              : isPartial
+                                              ? 'bg-amber-500/10 text-amber-100 hover:bg-amber-500/15 border border-amber-500/25'
                                               : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white border border-transparent'
                                           }`}
                                         >
@@ -543,6 +524,8 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
                                               className={`w-4 h-4 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition ${
                                                 isSubDone
                                                   ? 'bg-emerald-500 border-emerald-400 text-white'
+                                                  : isPartial
+                                                  ? 'bg-amber-500/60 border-amber-400 text-white'
                                                   : 'border-white/30 bg-black/20'
                                               }`}
                                             >
@@ -554,14 +537,19 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
                                               }`}
                                             >
                                               {item.label}
+                                              {isPartial && (
+                                                <span className="ml-1.5 text-[10px] font-bold text-amber-300">
+                                                  {subProgress}%
+                                                </span>
+                                              )}
                                             </span>
                                           </div>
                                           <span
                                             className={`text-[10px] uppercase font-bold shrink-0 mt-0.5 ${
-                                              isSubDone ? 'text-emerald-400' : 'text-slate-500'
+                                              isSubDone ? 'text-emerald-400' : isPartial ? 'text-amber-300' : 'text-slate-500'
                                             }`}
                                           >
-                                            {isSubDone ? 'Completed' : 'To Revise'}
+                                            {isSubDone ? 'Completed' : isPartial ? `${subProgress}% done` : 'To Revise'}
                                           </span>
                                         </div>
                                       );

@@ -6,12 +6,9 @@ export type StreamType =
   | 'Physical Science'
   | 'Biological Science'
   | 'Maths'
-  | 'Bio'
-  | 'Commerce'
-  | 'Technology'
-  | 'Arts';
+  | 'Bio';
 
-export type ScreenId = 'dashboard' | 'timetable' | 'daily' | 'topics' | 'progress';
+export type ScreenId = 'dashboard' | 'timetable' | 'daily' | 'topics' | 'progress' | 'admin' | 'settings';
 
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
 
@@ -27,14 +24,20 @@ export interface StreakData {
   isCompletedToday: boolean;
 }
 
+export interface SubtopicTarget {
+  subtopic: string;
+  targetProgress: number; // Planned completion % (0 - 100) for this block
+}
+
 export interface TimetableEntry {
   id: string;
   dayOfWeek: DayOfWeek;
   subject: string;
   topic: string;
   topicId?: string;         // Link to SyllabusTopic.id
-  subtopic?: string;        // Specific subtopic name
-  targetProgress?: number;  // Planned completion percentage (0 - 100) for this block
+  subtopic?: string;        // Specific subtopic name (legacy: first of subtopicTargets)
+  targetProgress?: number;  // Planned completion percentage (0 - 100) for this block (legacy: first target)
+  subtopicTargets?: SubtopicTarget[]; // Per-subtopic plan: each selected subtopic + its 0-100 slider value
   isCompleted?: boolean;    // Whether this study session is finished
   startTime: string; // "HH:MM" 24-hr format, e.g. "06:00"
   endTime: string;   // "HH:MM" 24-hr format, e.g. "08:00"
@@ -52,8 +55,9 @@ export interface DailyTask {
   subject: string;
   topicId?: string;         // Link to SyllabusTopic.id
   topicTitle?: string;      // Cached title of the syllabus topic
-  subtopic?: string;        // Specific subtopic name
-  targetProgress?: number;  // Planned completion percentage (0 - 100) for this block
+  subtopic?: string;        // Specific subtopic name (legacy: first of subtopicTargets)
+  targetProgress?: number;  // Planned completion percentage (0 - 100) for this block (legacy: first target)
+  subtopicTargets?: SubtopicTarget[]; // Per-subtopic plan: each selected subtopic + its 0-100 slider value
   isCompleted: boolean;
   completedAt?: string;
   timeSlot?: string;
@@ -94,8 +98,10 @@ export interface UserSettings {
   stream: StreamType;
   physicalScienceElective: 'Chemistry' | 'ICT';
   studentName: string;
-  targetExamYear: string; // e.g. "2026"
+  targetExamYear: string; // e.g. "2027"
+  targetExamDate: string; // Expected A/L date "YYYY-MM-DD", '' when unset
   targetZScore?: string;
+  motivationNote: string; // Personal note echoed in reminders, '' when unset
   reminderSoundEnabled: boolean;
   notificationsGranted: boolean;
   hasSeenNotificationPrompt: boolean;

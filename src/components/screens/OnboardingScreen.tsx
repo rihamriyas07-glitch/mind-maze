@@ -35,8 +35,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   );
   const [medium, setMedium] = useState<MediumType>(initialProfile.medium || 'English');
   const [targetGrade, setTargetGrade] = useState<string>(initialProfile.targetGrade);
-  const [examYear, setExamYear] = useState<string>('2026');
-  const [examDate, setExamDate] = useState<string>(initialProfile.examDate || '2026-11-15');
+  const [examYear, setExamYear] = useState<string>('2027');
+  const [examDate, setExamDate] = useState<string>(initialProfile.examDate || '2027-11-15');
   const [syllabus, setSyllabus] = useState<SyllabusType>(initialProfile.syllabus);
   const [dailyGoalMCQs, setDailyGoalMCQs] = useState<number>(initialProfile.dailyGoalMCQs || 20);
 
@@ -284,8 +284,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-2 mb-3">
-                {['2026 (Nov)', '2027 (Nov)'].map((opt) => {
-                  const val = opt.includes('2026') ? '2026-11-15' : '2027-11-15';
+                {['2027 (Nov)', '2028 (Nov)'].map((opt) => {
+                  const val = opt.includes('2027') ? '2027-11-15' : '2028-11-15';
                   const isSelected = examDate === val;
                   return (
                     <button

@@ -610,7 +610,7 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
               Study Plans, Timetables & Daily Topics
             </h1>
             <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Pace your journey to 3 A's with structured revision plans, interactive weekly study timetables, and high-yield daily syllabus coverage checklists.
+              Pace your journey to 3 A's with structured revision plans, interactive weekly study timetables, and daily syllabus coverage checklists.
             </p>
 
             {/* Active Plan Quick Badge */}
@@ -2133,7 +2133,7 @@ export const StudyPlansScreen: React.FC<StudyPlansScreenProps> = ({
                   </span>
                 </div>
                 <h3 className="text-lg font-bold text-white">
-                  High-Yield Focus for {availableTopicDates.find(d => d.dateStr === effectiveTopicDate)?.label || effectiveTopicDate}
+                  Focus for {availableTopicDates.find(d => d.dateStr === effectiveTopicDate)?.label || effectiveTopicDate}
                 </h3>
                 <p className="text-xs text-slate-300 max-w-xl">
                   Core syllabus topics mapped across past examination papers with formulas and structured review.

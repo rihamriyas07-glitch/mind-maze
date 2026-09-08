@@ -2,8 +2,10 @@
  * Mind Maze Notification & Study Reminder Service
  */
 import { TimetableEntry, DailyTask } from '../types';
-import { generateSmartStudyReminder } from './notificationMessages';
+import { generateSmartStudyReminder, generateDailyCountdown } from './notificationMessages';
 import { getTodayDateString } from './storage';
+
+const COUNTDOWN_SENT_KEY = 'mindmaze_countdown_sent_day';
 
 let audioCtx: AudioContext | null = null;
 
@@ -70,10 +72,25 @@ export async function requestBrowserNotificationPermission(): Promise<Notificati
 }
 
 /**
- * Register Service Worker if available
+ * Register Service Worker if available.
+ * Production only: registering during local development would let the worker
+ * serve stale cached shells and block Vite's dev server / HMR traffic, so in
+ * DEV we unregister any leftover workers and stay unregistered.
  */
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return null;
+  }
+  try {
+    if (import.meta.env.DEV) {
+      const regs = await navigator.serviceWorker.getRegistrations().catch(() => []);
+      await Promise.all(
+        (regs ?? []).map((reg) => reg.unregister().catch(() => false))
+      );
+      return null;
+    }
+  } catch (err) {
+    console.warn('Service worker dev cleanup failed:', err);
     return null;
   }
   try {
@@ -93,7 +110,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
 export async function sendStudyNotification(
   title: string,
   body: string,
-  icon = '/icon.svg',
+  icon = '/icon-192.png',
   tag = 'mind-maze-study-reminder'
 ): Promise<boolean> {
   // Always play gentle chime
@@ -111,7 +128,7 @@ export async function sendStudyNotification(
         await reg.showNotification(title, {
           body,
           icon,
-          badge: '/icon.svg',
+          badge: '/icon-192.png',
           tag,
           renotify: true,
           vibrate: [200, 100, 200],
@@ -124,7 +141,7 @@ export async function sendStudyNotification(
     new Notification(title, {
       body,
       icon,
-      badge: '/icon.svg',
+      badge: '/icon-192.png',
       tag,
     });
     return true;
@@ -136,6 +153,58 @@ export async function sendStudyNotification(
 
 // Track alerted slot IDs so we don't spam duplicate alerts within the same minute
 const alertedSlotIds = new Set<string>();
+
+/**
+ * Send the daily A/L countdown notification once each morning.
+ *
+ * Respects the existing setup: skipped entirely when notifications aren't
+ * granted, outside 8:00–22:00 quiet hours, when no exam date is set, or
+ * when the exam has passed. One send per calendar day max.
+ */
+export function maybeSendDailyCountdown(
+  examDateStr: string | null | undefined,
+  motivationNote?: string | null
+): { sent: boolean; message?: string } {
+  if (!examDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(examDateStr)) {
+    return { sent: false };
+  }
+  const [y, m, d] = examDateStr.split('-').map(Number);
+  const target = new Date(y, m - 1, d);
+  if (Number.isNaN(target.getTime())) return { sent: false };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysLeft = Math.round((target.getTime() - today.getTime()) / 86400000);
+  // Exam passed (yesterday or earlier) — nothing to count down to.
+  if (daysLeft < 0) return { sent: false };
+
+  // Morning send at/after 8 AM, never in quiet hours (10 PM - 8 AM).
+  const hour = new Date().getHours();
+  if (hour < 8 || hour >= 22) return { sent: false };
+
+  // Permission gate — same requirement as every other notification.
+  if (!isNotificationSupported() || Notification.permission !== 'granted') {
+    return { sent: false };
+  }
+
+  // Once per calendar day.
+  const todayStr = getTodayDateString();
+  try {
+    if (localStorage.getItem(COUNTDOWN_SENT_KEY) === todayStr) {
+      return { sent: false };
+    }
+  } catch {
+    return { sent: false };
+  }
+
+  const msg = generateDailyCountdown({ daysLeft, motivationNote });
+  if (!msg) return { sent: false };
+
+  void sendStudyNotification(msg.title, msg.body, '/icon-192.png', 'mind-maze-countdown');
+  try {
+    localStorage.setItem(COUNTDOWN_SENT_KEY, todayStr);
+  } catch {}
+  return { sent: true, message: `${msg.title}: ${msg.body}` };
+}
 
 /**
  * Check timetable entries against current local time and trigger smart contextual reminders

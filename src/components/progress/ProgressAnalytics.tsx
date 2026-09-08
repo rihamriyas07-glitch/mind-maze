@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { DailyTask, StreamType, SyllabusTopic, TimetableEntry, UserSettings } from '../../types';
 import {
   BarChart3,
@@ -12,7 +12,6 @@ import {
   Clock,
   Flame,
   Zap,
-  GraduationCap,
   Sparkles,
 } from 'lucide-react';
 import { SUBJECT_METAS, getSubjectsForStream } from '../../data/alSyllabusData';
@@ -27,7 +26,6 @@ interface ProgressAnalyticsProps {
   timetableEntries: TimetableEntry[];
   dailyTasks: DailyTask[];
   settings: UserSettings;
-  onUpdateSettings: (newSettings: Partial<UserSettings>) => void;
 }
 
 export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
@@ -36,11 +34,8 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
   timetableEntries,
   dailyTasks,
   settings,
-  onUpdateSettings,
 }) => {
-  const [targetYear, setTargetYear] = useState(settings.targetExamYear);
-  const [targetZScore, setTargetZScore] = useState(settings.targetZScore);
-  const [weeklyGoal, setWeeklyGoal] = useState(settings.weeklyHoursGoal);
+  const weeklyGoal = settings.weeklyHoursGoal;
 
   // Get subjects for this student's stream (Physical Science: Combined Maths, Physics, Chem/ICT; Biological Science: Biology, Chem, Physics)
   const streamSubjects = getSubjectsForStream(stream, settings.physicalScienceElective);
@@ -68,15 +63,6 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
   // Daily task completion stats
   const totalTasksAllTime = dailyTasks.length;
   const completedTasksAllTime = dailyTasks.filter((t) => t.isCompleted).length;
-
-  const handleSaveSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdateSettings({
-      targetExamYear: targetYear,
-      targetZScore: targetZScore,
-      weeklyHoursGoal: weeklyGoal,
-    });
-  };
 
   return (
     <div id="progress-analytics-view" className="space-y-6 max-w-6xl mx-auto pb-8">
@@ -108,68 +94,6 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Target Exam Goal Card */}
-      <div className="rounded-3xl border border-white/10 bg-gradient-to-r from-[#1E1949] to-[#12142B] p-5 sm:p-6 backdrop-blur-xl shadow-lg">
-        <form onSubmit={handleSaveSettings} className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-cyan-300 text-xs font-bold uppercase tracking-wider">
-              <GraduationCap className="w-4 h-4" />
-              <span>GCE A/L Target Aspirations</span>
-            </div>
-            <h2 className="text-lg sm:text-xl font-black text-white">
-              Targeting {targetYear} Examination • Z-Score {targetZScore}
-            </h2>
-            <p className="text-xs text-slate-300">
-              Customize your target exam sitting, target Z-Score cut-off, and weekly revision hour target.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Target Exam Year</label>
-              <select
-                value={targetYear}
-                onChange={(e) => setTargetYear(e.target.value)}
-                className="rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-xs font-bold text-white focus:outline-none"
-              >
-                <option value="2025" className="bg-[#161831]">2025 A/L</option>
-                <option value="2026" className="bg-[#161831]">2026 A/L</option>
-                <option value="2027" className="bg-[#161831]">2027 A/L</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Target Z-Score</label>
-              <input
-                type="text"
-                value={targetZScore}
-                onChange={(e) => setTargetZScore(e.target.value)}
-                className="w-24 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-xs font-bold text-white focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Weekly Goal (hrs)</label>
-              <input
-                type="number"
-                min={5}
-                max={70}
-                value={weeklyGoal}
-                onChange={(e) => setWeeklyGoal(Number(e.target.value))}
-                className="w-20 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-xs font-bold text-white focus:outline-none"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="mt-4 md:mt-0 px-4 py-2.5 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-xs font-bold transition shadow-md cursor-pointer min-h-[40px]"
-            >
-              Update Goal
-            </button>
-          </div>
-        </form>
       </div>
 
       {/* Metrics Row */}
@@ -315,11 +239,11 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
         </div>
       </div>
 
-      {/* High-Yield Sri Lankan GCE A/L Exam Strategies */}
+      {/* Sri Lankan GCE A/L Exam Strategies */}
       <div className="rounded-3xl border border-cyan-500/30 bg-gradient-to-br from-[#121636] to-[#0D1022] p-5 sm:p-6 backdrop-blur-xl shadow-xl space-y-3">
         <div className="flex items-center gap-2 text-cyan-300 text-sm font-bold">
           <Zap className="w-4 h-4 text-cyan-400" />
-          <span>High-Yield GCE A/L Preparation Strategies</span>
+          <span>GCE A/L Preparation Strategies</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-300">

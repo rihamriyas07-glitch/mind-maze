@@ -101,14 +101,9 @@ function colorGen(x, y, w, h) {
   return [Math.min(255, r), Math.min(255, g), Math.min(255, b), a];
 }
 
-const publicDir = path.join(__dirname, '..', 'public');
-if (!fs.existsSync(publicDir)) {
-  fs.mkdirSync(publicDir, { recursive: true });
-}
-
-fs.writeFileSync(path.join(publicDir, 'pwa-192x192.png'), createPng(192, 192, colorGen));
-fs.writeFileSync(path.join(publicDir, 'pwa-512x512.png'), createPng(512, 512, colorGen));
-fs.writeFileSync(path.join(publicDir, 'apple-touch-icon.png'), createPng(180, 180, colorGen));
-fs.writeFileSync(path.join(publicDir, 'pwa-maskable-512x512.png'), createPng(512, 512, colorGen));
-
-console.log('Successfully generated PWA PNG icons!');
+// NOTE: PWA icons are now derived from the real brand art in /public
+// (full_512.png -> icon-512.png, 192.png -> icon-192.png, plus a padded
+// icon-maskable-512.png). This legacy placeholder generator is disabled so it
+// can never overwrite the real logo icons. Delete this file if unused.
+console.log('Skipped: PWA icons now come from full_512.png / 192.png brand art.');
+process.exit(0);

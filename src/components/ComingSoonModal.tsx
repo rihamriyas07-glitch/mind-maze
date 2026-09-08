@@ -93,7 +93,7 @@ export const ComingSoonModal: React.FC<ComingSoonModalProps> = ({
 
         {/* Description Body */}
         <p className="text-sm text-slate-300 leading-relaxed mb-5">
-          Past paper questions, interactive quiz engines, and verified marking schemes for <strong className="text-white">{subjectName}</strong> are currently undergoing expert teacher verification for the 2026 examination sitting.
+          Past paper questions, interactive quiz engines, and verified marking schemes for <strong className="text-white">{subjectName}</strong> are currently undergoing expert teacher verification for the 2027 examination sitting.
         </p>
 
         {/* Highlight Banner: Study Plans are 100% Live */}
@@ -103,7 +103,7 @@ export const ComingSoonModal: React.FC<ComingSoonModalProps> = ({
             <span>Study Plans, Timetables & Daily Topics Are Live</span>
           </div>
           <p className="text-xs text-slate-300 leading-relaxed">
-            While interactive MCQ banks are being prepared, your structured study plans, weekly study timetables, and high-yield daily syllabus cover topics are fully active to guide your daily revision.
+            While interactive MCQ banks are being prepared, your structured study plans, weekly study timetables, and daily syllabus cover topics are fully active to guide your daily revision.
           </p>
           <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-emerald-200">
             <span className="inline-flex items-center gap-1">
@@ -136,7 +136,7 @@ export const ComingSoonModal: React.FC<ComingSoonModalProps> = ({
           )}
 
           <a
-            href="https://chat.whatsapp.com"
+            href="https://chat.whatsapp.com/C4NbNeRB9mY57jw2dPf7EZ?s=cl&p=i&mlu=4"
             target="_blank"
             rel="noopener noreferrer"
             id="btn-whatsapp-notify"

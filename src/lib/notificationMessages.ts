@@ -138,7 +138,7 @@ const STREAK_KEEPER_MESSAGES = [
 const TOPIC_REMINDER_MESSAGES = [
   (ctx: StudyReminderContext) => ({
     title: `Study Time: ${ctx.subject} 📚`,
-    body: `${ctx.timeContext ? `${ctx.timeContext}: ` : ''}${ctx.topicTitle}${ctx.subtopic ? ` (${ctx.subtopic})` : ''}. Time for high-yield revision!`,
+    body: `${ctx.timeContext ? `${ctx.timeContext}: ` : ''}${ctx.topicTitle}${ctx.subtopic ? ` (${ctx.subtopic})` : ''}. Time for daily revision!`,
   }),
   (ctx: StudyReminderContext) => ({
     title: `Up Next: ${ctx.topicTitle} 🎯`,
@@ -237,4 +237,53 @@ export function generatePeriodicNudge(ctx: NudgeContext): NotificationMessage {
     ...chosen(ctx),
     type: 'nudge',
   };
+}
+
+export interface CountdownContext {
+  daysLeft: number;
+  motivationNote?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Daily A/L countdown (sent once each morning; varies day to day)
+// ---------------------------------------------------------------------------
+const COUNTDOWN_MESSAGES = [
+  (days: number) => `${days} days until your A/Ls — keep going! 📚`,
+  (days: number) => `${days} days left. Every topic counts. 💪`,
+  (days: number) => `A/Ls in ${days} days — one focused session at a time. 🎯`,
+  (days: number) => `${days} days to go. Future you is watching. 👀`,
+  (days: number) => `${days} days remaining — protect the streak today! 🔥`,
+  (days: number) => `Only ${days} days until your A/Ls. Make today matter! ⭐`,
+];
+
+/**
+ * Generates the daily morning countdown notification. Returns null when
+ * there is nothing to send (no date or exam already passed — caller skips).
+ */
+export function generateDailyCountdown(
+  ctx: CountdownContext
+): (NotificationMessage & { kind: 'countdown' | 'exam-day' }) | null {
+  if (ctx.daysLeft < 0) return null;
+  if (ctx.daysLeft === 0) {
+    const base = 'Your A/Ls start today — good luck! 🍀 Give it everything!';
+    return {
+      title: 'A/L day is here! 🎯',
+      body: appendNote(base, ctx.motivationNote),
+      type: 'topic_reminder',
+      kind: 'exam-day',
+    };
+  }
+  const variants = COUNTDOWN_MESSAGES.map((fn) => fn(ctx.daysLeft));
+  const picked = pickRandom(variants);
+  return {
+    title: `⏳ ${ctx.daysLeft} day${ctx.daysLeft === 1 ? '' : 's'} to A/Ls`,
+    body: appendNote(picked, ctx.motivationNote),
+    type: 'topic_reminder',
+    kind: 'countdown',
+  };
+}
+
+function appendNote(base: string, note?: string | null): string {
+  const clean = (note ?? '').trim().slice(0, 140);
+  return clean ? `${base} Remember: “${clean}”` : base;
 }

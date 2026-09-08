@@ -10,7 +10,6 @@ import {
   CalendarDays,
   Clock,
   CheckCircle2,
-  ChevronRight,
   MessageCircle,
   Flame,
   Check,
@@ -44,52 +43,42 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       icon: '🔬',
       desc: 'Biology, Chemistry & Physics structured timetable with unit-wise revision milestones.',
       color: 'from-emerald-600/30 to-teal-900/40 border-emerald-500/30 text-emerald-400',
-      subjects: ['Biology', 'Chemistry', 'Physics', 'AgTech'],
-    },
-    {
-      id: 'Commerce',
-      name: 'Commerce Stream',
-      icon: '📈',
-      desc: 'Accounting, Business Studies & Economics daily topic tracking and practice slots.',
-      color: 'from-amber-600/30 to-orange-900/40 border-amber-500/30 text-amber-400',
-      subjects: ['Accounting', 'Business Studies', 'Economics', 'Business Statistics'],
-    },
-    {
-      id: 'Technology',
-      name: 'Technology Stream',
-      icon: '⚙️',
-      desc: 'Engineering Tech (ET), Bio-Systems (BST) & Science for Tech (SFT) coverage routines.',
-      color: 'from-cyan-600/30 to-sky-900/40 border-cyan-500/30 text-cyan-400',
-      subjects: ['Engineering Tech (ET)', 'Bio-Systems Tech (BST)', 'Science for Tech (SFT)', 'ICT'],
-    },
-    {
-      id: 'Arts',
-      name: 'Arts Stream',
-      icon: '🎨',
-      desc: 'Sinhala/Tamil, Political Science, Logic, History & Geography topic coverage timetables.',
-      color: 'from-purple-600/30 to-fuchsia-900/40 border-purple-500/30 text-purple-400',
-      subjects: ['Political Science', 'Logic & Scientific Method', 'Geography', 'History'],
+      subjects: ['Biology', 'Chemistry', 'Physics'],
     },
   ];
 
   return (
     <div id="mind-maze-landing-view" className="relative min-h-screen">
+      {/* Decorative ambient brain-logo backdrop — landing page only, non-interactive */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div className="landing-brain-glow" />
+        <img
+          src="/icon-512.png"
+          alt=""
+          width={512}
+          height={512}
+          draggable={false}
+          loading="lazy"
+          decoding="async"
+          className="landing-brain-logo"
+        />
+      </div>
       {/* Hero Section */}
-      <section className="relative overflow-hidden pt-10 pb-14 md:pt-18 md:pb-20">
+      <section className="relative z-10 overflow-hidden pt-10 pb-14 md:pt-18 md:pb-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center text-center">
             {/* Top Pill Badge */}
             <div className="inline-flex items-center gap-2 rounded-full border border-purple-400/40 bg-purple-500/15 px-4 py-1.5 text-xs font-semibold text-cyan-300 shadow-[0_0_15px_rgba(107,78,255,0.3)] backdrop-blur-md mb-4">
               <Sparkles className="h-4 w-4 text-cyan-300" />
-              <span>GCE A/L Complete Revision Engine • 5 Streams Supported</span>
+              <span>GCE A/L Complete Revision Engine • 2 Streams Supported</span>
             </div>
 
             {/* Main Tagline */}
             <h1 className="mt-2 max-w-4xl text-3xl font-extrabold tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Study Plans, Time Tables & Daily Cover Topics for{' '}
+              Pick your stream.{' '}
               <span className="relative inline-block">
                 <span className="bg-gradient-to-r from-[#6B4EFF] via-[#8B5CF6] to-cyan-400 bg-clip-text text-transparent">
-                  GCE A/L Students
+                  Get your plan.
                 </span>
                 <span className="absolute -bottom-1 left-0 right-0 h-1 rounded-full bg-gradient-to-r from-[#6B4EFF] to-cyan-400" />
               </span>
@@ -97,7 +86,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             {/* Subtitle */}
             <p className="mt-5 max-w-2xl text-sm sm:text-base md:text-lg text-slate-300 leading-relaxed">
-              Stay disciplined on your path to 3 A's. Follow structured syllabus revision plans, manage your interactive weekly study timetable, and track high-yield daily cover topics on both computer and mobile.
+              Stay disciplined on your path to 3 A's. Follow structured syllabus revision plans, manage your interactive weekly study timetable, and track daily cover topics on both computer and mobile.
             </p>
 
             {/* 3 Core Pillars Pill Summary */}
@@ -135,15 +124,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <span>Get Started (Choose Stream)</span>
                 <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
               </button>
-
-              <button
-                id="btn-hero-open-study-plans"
-                onClick={() => onNavigate('study-plan')}
-                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/10 px-7 py-4 text-base font-semibold text-slate-200 hover:bg-white/20 transition-all backdrop-blur-md cursor-pointer"
-              >
-                <Target className="h-5 w-5 text-cyan-300" />
-                <span>View Study Plans</span>
-              </button>
             </div>
 
             {/* Quick Sign-In Option */}
@@ -163,7 +143,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </section>
 
       {/* THE 3 CORE MODULES (STUDY PLANS, TIMETABLES, DAILY TOPICS) */}
-      <section className="py-8">
+      <section className="relative z-10 py-8">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center mb-8">
             <h2 className="text-xs font-bold uppercase tracking-widest text-cyan-400">
@@ -174,156 +154,76 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Pillar 1: Study Plans */}
-            <div
-              onClick={() => onNavigate('study-plan')}
-              className="group relative rounded-3xl border border-purple-500/30 bg-gradient-to-br from-[#1E1744]/80 to-[#12142B]/90 p-6 backdrop-blur-xl hover:border-[#6B4EFF] transition-all hover:-translate-y-1 shadow-xl cursor-pointer flex flex-col justify-between"
-            >
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-500/20 border border-purple-400/30 text-purple-300">
-                    <Target className="h-6 w-6 text-purple-300" />
+          <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory md:grid md:grid-cols-3 md:overflow-visible md:pb-0">
+            {[
+              {
+                id: 'study-plan',
+                icon: Target,
+                iconWrap: 'bg-purple-500/20 border-purple-400/30 text-purple-300',
+                cardBorder: 'border-purple-500/30',
+                title: 'Study plan',
+                lines: [
+                  'What to study, and when',
+                  'For Maths and Bio students',
+                  "Shows how much you've covered so far.",
+                ],
+              },
+              {
+                id: 'timetable',
+                icon: CalendarDays,
+                iconWrap: 'bg-cyan-500/20 border-cyan-400/30 text-cyan-300',
+                cardBorder: 'border-cyan-500/30',
+                title: 'Weekly timetable',
+                lines: [
+                  'Your week made simple.',
+                  'Change any day to fit your routine',
+                  'Has a built-in study timer',
+                ],
+              },
+              {
+                id: 'daily-topics',
+                icon: BookOpen,
+                iconWrap: 'bg-emerald-500/20 border-emerald-400/30 text-emerald-300',
+                cardBorder: 'border-emerald-500/30',
+                title: "Today's topics",
+                lines: [
+                  'What to study right now',
+                  'A short list of what to study today',
+                  'Tick each one off as you finish',
+                ],
+              },
+            ].map((item, idx) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={item.id}
+                  className={`rounded-2xl border ${item.cardBorder} bg-[#161831]/80 backdrop-blur-xl shadow-xl p-4 sm:p-5 flex flex-col min-w-[240px] sm:min-w-[260px] snap-center md:min-w-0`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`flex h-10 w-10 items-center justify-center rounded-xl border shrink-0 ${item.iconWrap}`}>
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span className="text-base sm:text-lg font-bold text-white">
+                      {idx + 1}. {item.title}
+                    </span>
                   </div>
-                  <span className="rounded-full bg-purple-500/20 border border-purple-400/40 px-3 py-1 text-[11px] font-bold text-cyan-300">
-                    Pillar 1
-                  </span>
-                </div>
-
-                <div>
-                  <h3 className="text-xl font-bold text-white group-hover:text-cyan-300 transition-colors">
-                    Revision Study Plans
-                  </h3>
-                  <p className="mt-2 text-xs sm:text-sm text-slate-300 leading-relaxed">
-                    Customized phases for each of the 5 A/L streams: 90-Day Comprehensive Revision, 30-Day High-Yield Sprint, and Last-Mile Exam Drills.
-                  </p>
-                </div>
-
-                <div className="space-y-2 pt-2 text-xs text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Multi-phase unit-by-unit roadmaps</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Target daily study hours & MCQ targets</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Milestone tracking with progress bars</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-5 border-t border-white/10 flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-300 group-hover:text-cyan-300 flex items-center gap-1">
-                  Open Study Plans <ArrowRight className="w-4 h-4" />
-                </span>
-                <span className="text-[11px] text-slate-400 font-medium">All 5 Streams</span>
-              </div>
-            </div>
-
-            {/* Pillar 2: Weekly Timetables */}
-            <div
-              onClick={() => onNavigate('timetable')}
-              className="group relative rounded-3xl border border-cyan-500/30 bg-gradient-to-br from-[#0B253A]/80 to-[#12142B]/90 p-6 backdrop-blur-xl hover:border-cyan-400 transition-all hover:-translate-y-1 shadow-xl cursor-pointer flex flex-col justify-between"
-            >
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/20 border border-cyan-400/30 text-cyan-300">
-                    <Calendar className="h-6 w-6 text-cyan-300" />
-                  </div>
-                  <span className="rounded-full bg-cyan-500/20 border border-cyan-400/40 px-3 py-1 text-[11px] font-bold text-cyan-300">
-                    Pillar 2
-                  </span>
-                </div>
-
-                <div>
-                  <h3 className="text-xl font-bold text-white group-hover:text-cyan-300 transition-colors">
-                    Weekly Time Tables
-                  </h3>
-                  <p className="mt-2 text-xs sm:text-sm text-slate-300 leading-relaxed">
-                    Interactive spreadsheet-style study schedule with built-in Study Sprint Timer (Pomodoro), direct cell editing, and day-by-day filters.
-                  </p>
-                </div>
-
-                <div className="space-y-2 pt-2 text-xs text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span>Interactive weekly slot checklist</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span>25m, 50m & 120m Study Sprint Timer</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span>Fully customizable slots per stream</span>
+                  <div className="space-y-2 mt-4">
+                    {item.lines.map((line, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs sm:text-sm text-slate-300">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>{line}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
-
-              <div className="mt-6 pt-5 border-t border-white/10 flex items-center justify-between">
-                <span className="text-xs font-bold text-cyan-300 flex items-center gap-1">
-                  View Time Table <ArrowRight className="w-4 h-4" />
-                </span>
-                <span className="text-[11px] text-slate-400 font-medium">Monday–Sunday</span>
-              </div>
-            </div>
-
-            {/* Pillar 3: Daily Cover Topics */}
-            <div
-              onClick={() => onNavigate('daily-topics')}
-              className="group relative rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-[#0B2E24]/80 to-[#12142B]/90 p-6 backdrop-blur-xl hover:border-emerald-400 transition-all hover:-translate-y-1 shadow-xl cursor-pointer flex flex-col justify-between"
-            >
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
-                    <BookOpen className="h-6 w-6 text-emerald-300" />
-                  </div>
-                  <span className="rounded-full bg-emerald-500/20 border border-emerald-400/40 px-3 py-1 text-[11px] font-bold text-emerald-300">
-                    Pillar 3
-                  </span>
-                </div>
-
-                <div>
-                  <h3 className="text-xl font-bold text-white group-hover:text-emerald-300 transition-colors">
-                    Daily Cover Topics
-                  </h3>
-                  <p className="mt-2 text-xs sm:text-sm text-slate-300 leading-relaxed">
-                    High-yield syllabus checklists covering essential units, key sub-topics, estimated revision times, and priority ratings for each day.
-                  </p>
-                </div>
-
-                <div className="space-y-2 pt-2 text-xs text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Core theory & past question checklist</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>High / Medium / Extreme priority badges</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Earn XP as you complete daily goals</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-5 border-t border-white/10 flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-300 flex items-center gap-1">
-                  Track Daily Topics <ArrowRight className="w-4 h-4" />
-                </span>
-                <span className="text-[11px] text-slate-400 font-medium">Syllabus Breakdown</span>
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* STREAM EXPLORER (ALL 5 GCE A/L STREAMS) */}
-      <section className="py-14 border-t border-white/10 bg-white/[0.02]">
+      <section className="relative z-10 py-14 border-t border-white/10 bg-white/[0.02]">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-10">
             <span className="text-xs font-bold uppercase tracking-widest text-purple-400">
@@ -333,11 +233,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Choose Your GCE A/L Stream
             </h2>
             <p className="text-xs sm:text-sm text-slate-400 mt-2">
-              Every stream has custom revision schedules, timetables, and daily high-yield topics pre-loaded for you.
+              Every stream has custom revision schedules, timetables, and daily topics pre-loaded for you.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-4xl mx-auto">
             {streamList.map((st) => (
               <div
                 key={st.id}
@@ -390,7 +290,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </section>
 
       {/* Community Banner */}
-      <section className="py-12 border-t border-white/10 bg-gradient-to-r from-[#12142B] via-[#1A1840] to-[#12142B]">
+      <section className="relative z-10 py-12 border-t border-white/10 bg-gradient-to-r from-[#12142B] via-[#1A1840] to-[#12142B]">
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <div className="rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-6 sm:p-10 backdrop-blur-xl flex flex-col sm:flex-row items-center justify-between gap-6 shadow-2xl">
             <div className="space-y-2 text-center sm:text-left">
@@ -398,14 +298,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <MessageCircle className="w-3.5 h-3.5" />
                 Sri Lankan A/L Student Community
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-white">Join 15,000+ A/L Students on WhatsApp</h3>
+              <h3 className="text-xl sm:text-2xl font-bold text-white">Join 400+ A/L Students on WhatsApp</h3>
               <p className="text-xs sm:text-sm text-slate-300 max-w-lg">
                 Get daily study plan reminders, timetable templates, and syllabus discussion groups directly on your phone.
               </p>
             </div>
 
             <a
-              href="https://chat.whatsapp.com"
+              href="https://chat.whatsapp.com/C4NbNeRB9mY57jw2dPf7EZ?s=cl&p=i&mlu=4"
               target="_blank"
               rel="noopener noreferrer"
               id="btn-join-whatsapp-hero"
@@ -419,7 +319,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </section>
 
       {/* Footer strictly showing the 3 core items */}
-      <footer className="border-t border-white/10 bg-[#161831]/80 backdrop-blur-md py-10 text-slate-400 text-xs">
+      <footer className="relative z-10 border-t border-white/10 bg-[#161831]/80 backdrop-blur-md py-10 text-slate-400 text-xs">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <Logo size="sm" onClick={() => onNavigate('landing')} />
@@ -452,7 +352,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             <a
-              href="https://chat.whatsapp.com"
+              href="https://chat.whatsapp.com/C4NbNeRB9mY57jw2dPf7EZ?s=cl&p=i&mlu=4"
               target="_blank"
               rel="noopener noreferrer"
               id="btn-join-whatsapp-footer"

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { DayOfWeek, TimetableEntry, StreamType } from '../../types';
+import { DayOfWeek, SubtopicTarget, SyllabusTopic, TimetableEntry, StreamType } from '../../types';
 import {
   Plus,
   Calendar,
@@ -21,12 +21,15 @@ import {
 } from 'lucide-react';
 import { SUBJECT_METAS, getSubjectsForStream } from '../../data/alSyllabusData';
 import { INITIAL_TIMETABLE_ENTRIES } from '../../data/alSyllabusData';
+import { SubtopicTargetPicker } from '../common/SubtopicTargetPicker';
+import { getBlockSubtopicTargets } from '../../lib/syllabusProgression';
 
 interface WeeklyTimetableProps {
   entries: TimetableEntry[];
+  syllabusTopics?: SyllabusTopic[];
   stream: StreamType;
+  /** Read-only elective (no picker here; change in Settings → Study Programme). */
   physicalScienceElective?: 'Chemistry' | 'ICT';
-  onSelectElective?: (elective: 'Chemistry' | 'ICT') => void;
   onAddEntry: (
     entry: Omit<TimetableEntry, 'id'> & { syncToDailyPlanner?: boolean }
   ) => void;
@@ -60,9 +63,9 @@ const COLOR_MAP: Record<string, { bg: string; border: string; text: string; badg
 
 export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
   entries,
+  syllabusTopics = [],
   stream,
   physicalScienceElective = 'Chemistry',
-  onSelectElective,
   onAddEntry,
   onUpdateEntry,
   onDeleteEntry,
@@ -87,6 +90,8 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
   const [formDay, setFormDay] = useState<DayOfWeek>('Monday');
   const [formSubject, setFormSubject] = useState<string>(availableSubjects[0]?.name || 'Combined Mathematics');
   const [formTopic, setFormTopic] = useState<string>('');
+  const [formTopicId, setFormTopicId] = useState<string>('');
+  const [formTargets, setFormTargets] = useState<SubtopicTarget[]>([]);
   const [formStartTime, setFormStartTime] = useState<string>('06:00');
   const [formEndTime, setFormEndTime] = useState<string>('08:00');
   const [formColor, setFormColor] = useState<string>(availableSubjects[0]?.color || 'indigo');
@@ -101,6 +106,8 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
     const firstSubj = availableSubjects[0]?.name || 'Combined Mathematics';
     setFormSubject(firstSubj);
     setFormTopic('');
+    setFormTopicId('');
+    setFormTargets([]);
     setFormStartTime('06:00');
     setFormEndTime('08:00');
     setFormColor(availableSubjects[0]?.color || 'indigo');
@@ -116,6 +123,14 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
     setFormDay(entry.dayOfWeek);
     setFormSubject(entry.subject);
     setFormTopic(entry.topic);
+    setFormTopicId(entry.topicId || '');
+    setFormTargets(
+      Array.isArray(entry.subtopicTargets) && entry.subtopicTargets.length > 0
+        ? entry.subtopicTargets.map((t) => ({ ...t }))
+        : entry.subtopic
+          ? [{ subtopic: entry.subtopic, targetProgress: entry.targetProgress ?? 100 }]
+          : []
+    );
     setFormStartTime(entry.startTime);
     setFormEndTime(entry.endTime);
     setFormColor(entry.color);
@@ -126,9 +141,33 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
     setIsModalOpen(true);
   };
 
+  const handleTimetableTopicChange = (topicId: string) => {
+    setFormTopicId(topicId);
+    if (!topicId) {
+      setFormTargets([]);
+      return;
+    }
+    const matched = syllabusTopics.find((t) => t.id === topicId);
+    if (matched) {
+      // Auto-fill the free-text topic title when empty so timetable cards stay readable.
+      setFormTopic((prev) => (prev.trim() ? prev : matched.topicTitle));
+    }
+    // Drop targets that don't belong to the newly selected topic is handled
+    // by clearing here; the picker only shows subtopics of the current topic.
+    setFormTargets([]);
+  };
+
   const handleSaveModal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTopic.trim()) return;
+
+    const cleanTargets = formTargets
+      .filter((t) => t.subtopic.trim())
+      .map((t) => ({
+        subtopic: t.subtopic.trim(),
+        targetProgress: Math.max(0, Math.min(100, Math.round(t.targetProgress))),
+      }));
+    const first = cleanTargets[0];
 
     if (editingEntry) {
       onUpdateEntry({
@@ -136,6 +175,10 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
         dayOfWeek: formDay,
         subject: formSubject,
         topic: formTopic.trim(),
+        topicId: formTopicId || undefined,
+        subtopic: first?.subtopic,
+        targetProgress: first?.targetProgress,
+        subtopicTargets: cleanTargets.length > 0 ? cleanTargets : undefined,
         startTime: formStartTime,
         endTime: formEndTime,
         color: formColor,
@@ -148,6 +191,10 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
         dayOfWeek: formDay,
         subject: formSubject,
         topic: formTopic.trim(),
+        topicId: formTopicId || undefined,
+        subtopic: first?.subtopic,
+        targetProgress: first?.targetProgress,
+        subtopicTargets: cleanTargets.length > 0 ? cleanTargets : undefined,
         startTime: formStartTime,
         endTime: formEndTime,
         color: formColor,
@@ -194,31 +241,12 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
               <span>Daily Planner Synced</span>
             </div>
 
-            {(stream === 'Physical Science' || (stream as string) === 'Maths') && onSelectElective && (
+            {(stream === 'Physical Science' || (stream as string) === 'Maths') && (
               <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/10 border border-white/15 text-xs">
                 <span className="text-[10px] text-slate-300 font-semibold">3rd Elective:</span>
-                <button
-                  type="button"
-                  onClick={() => onSelectElective('Chemistry')}
-                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                    physicalScienceElective === 'Chemistry'
-                      ? 'bg-purple-500/30 text-purple-200 border border-purple-400/40'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  🧪 Chemistry
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSelectElective('ICT')}
-                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                    physicalScienceElective === 'ICT'
-                      ? 'bg-pink-500/30 text-pink-200 border border-pink-400/40'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  💻 ICT
-                </button>
+                <span className="px-2 py-0.5 rounded-md text-[11px] font-bold text-slate-200">
+                  {physicalScienceElective === 'ICT' ? '💻 ICT' : '🧪 Chemistry'}
+                </span>
               </div>
             )}
           </div>
@@ -437,12 +465,26 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                             Daily Planner
                           </span>
                         )}
-                        {entry.subtopic && (
-                          <span className="text-[10px] text-emerald-300 font-semibold flex items-center gap-1 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-400/30">
-                            <BookOpen className="w-2.5 h-2.5 text-emerald-300" />
-                            <span className="line-clamp-1">{entry.subtopic}</span>
-                          </span>
-                        )}
+                        {(() => {
+                          const targets = getBlockSubtopicTargets(entry);
+                          if (targets.length === 0) return null;
+                          return (
+                            <span className="flex flex-wrap items-center gap-1.5">
+                              {targets.slice(0, 3).map((t) => (
+                                <span key={t.subtopic} className="text-[10px] text-emerald-300 font-semibold flex items-center gap-1 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-400/30">
+                                  <BookOpen className="w-2.5 h-2.5 text-emerald-300" />
+                                  <span className="line-clamp-1 max-w-[140px]">{t.subtopic}</span>
+                                  <span className="font-black text-emerald-200">• {t.targetProgress}%</span>
+                                </span>
+                              ))}
+                              {targets.length > 3 && (
+                                <span className="text-[10px] text-slate-400 font-semibold">
+                                  +{targets.length - 3} more
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </div>
 
                       {/* Notes / Plan */}
@@ -637,6 +679,8 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                     if (matched) {
                       setFormColor(matched.color);
                     }
+                    setFormTopicId('');
+                    setFormTargets([]);
                   }}
                   className="w-full rounded-xl bg-white/5 border border-white/15 px-3 py-2.5 text-white font-medium focus:border-cyan-400 focus:outline-none"
                 >
@@ -668,6 +712,16 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                   className="w-full rounded-xl bg-white/5 border border-white/15 px-3 py-2.5 text-white placeholder-slate-500 font-medium focus:border-cyan-400 focus:outline-none"
                 />
               </div>
+
+              {/* Syllabus subtopic targets with 0-100 sliders */}
+              <SubtopicTargetPicker
+                syllabusTopics={syllabusTopics}
+                subject={formSubject}
+                topicId={formTopicId}
+                onTopicChange={handleTimetableTopicChange}
+                targets={formTargets}
+                onTargetsChange={setFormTargets}
+              />
 
               {/* Times: Start and End */}
               <div className="grid grid-cols-2 gap-3">

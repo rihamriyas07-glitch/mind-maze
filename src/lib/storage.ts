@@ -10,8 +10,10 @@ export const DEFAULT_SETTINGS: UserSettings = {
   stream: 'Physical Science',
   physicalScienceElective: 'Chemistry',
   studentName: 'A/L Scholar',
-  targetExamYear: '2026',
+  targetExamYear: '2027',
+  targetExamDate: '',
   targetZScore: '2.450',
+  motivationNote: '',
   reminderSoundEnabled: true,
   notificationsGranted: false,
   hasSeenNotificationPrompt: false,
@@ -84,29 +86,49 @@ export function getStoredSyllabusTopics(): SyllabusTopic[] {
       return INITIAL_SYLLABUS_TOPICS;
     }
 
-    // Check if the stored Physics syllabus has the new combined Unit 10 & Unit 11 (11 units total, no phy-12 to phy-17)
-    const isPhysicsCombined = parsed.some(
-      (t: SyllabusTopic) => t.subject === 'Physics' && t.id === 'phy-10' && t.topicTitle === 'Mechanical Properties of Matter'
-    ) && parsed.some(
-      (t: SyllabusTopic) => t.subject === 'Physics' && t.id === 'phy-11' && t.topicTitle === 'Matter and Radiation'
-    ) && !parsed.some((t: SyllabusTopic) => t.subject === 'Physics' && (t.id === 'phy-12' || t.id === 'phy-17'));
+    // Migrate any stored syllabus to the latest detailed version (Physics 1-11,
+    // Chemistry 1-14, Biology 1-10, ICT 1-14, Combined Maths Pure+Applied 1-18).
+    // Preserves user progress (status / notes) while refreshing subtopic lists.
+    // Custom user topics (isCustom) are always preserved.
+    const needsMigration =
+      parsed.length !== INITIAL_SYLLABUS_TOPICS.length ||
+      (parsed as SyllabusTopic[]).some((t: SyllabusTopic) => t.id === 'phy-12' || t.id === 'phy-17') ||
+      INITIAL_SYLLABUS_TOPICS.some((fresh) => {
+        if (fresh.isCustom) return false;
+        const existing = (parsed as SyllabusTopic[]).find((p: SyllabusTopic) => p.id === fresh.id);
+        if (!existing) return true;
+        const existingSubs = existing.subtopics || [];
+        const freshSubs = fresh.subtopics || [];
+        if (existingSubs.length !== freshSubs.length) return true;
+        if (fresh.topicTitle !== existing.topicTitle || fresh.unitTitle !== existing.unitTitle) return true;
+        return freshSubs.some((s) => !existingSubs.includes(s));
+      });
 
-    if (!isPhysicsCombined) {
-      const nonPhysicsTopics = parsed.filter((t: SyllabusTopic) => t.subject !== 'Physics');
-      const freshPhysicsTopics = INITIAL_SYLLABUS_TOPICS.filter((t) => t.subject === 'Physics').map((fresh) => {
-        // Preserve previous completed status for Unit 1 - 9 if already tracked
-        const existing = parsed.find((p: SyllabusTopic) => p.subject === 'Physics' && p.id === fresh.id);
-        if (existing && existing.status) {
+    if (needsMigration) {
+      const customTopics = (parsed as SyllabusTopic[]).filter((t: SyllabusTopic) => t.isCustom);
+      const merged = INITIAL_SYLLABUS_TOPICS.map((fresh) => {
+        const existing = (parsed as SyllabusTopic[]).find((p: SyllabusTopic) => p.id === fresh.id);
+        if (existing) {
+          const freshSubs = fresh.subtopics || [];
+          // Keep only completed subtopics that still exist in the new detailed list
+          const keptCompleted = (existing.completedSubtopics || []).filter((s: string) =>
+            freshSubs.includes(s)
+          );
+          const keptProgress: Record<string, number> = {};
+          for (const [k, v] of Object.entries(existing.subtopicProgress || {})) {
+            if (freshSubs.includes(k)) keptProgress[k] = v;
+          }
           return {
             ...fresh,
-            status: existing.status,
-            completedSubtopics: existing.completedSubtopics || [],
+            status: existing.status || fresh.status,
+            completedSubtopics: keptCompleted,
+            subtopicProgress: keptProgress,
             notes: existing.notes || fresh.notes,
           };
         }
         return fresh;
       });
-      const updated = [...freshPhysicsTopics, ...nonPhysicsTopics];
+      const updated = [...merged, ...customTopics];
       saveStoredSyllabusTopics(updated);
       return updated;
     }
