@@ -10,6 +10,8 @@ interface SubtopicTargetPickerProps {
   onTopicChange: (topicId: string) => void;
   targets: SubtopicTarget[];
   onTargetsChange: (targets: SubtopicTarget[]) => void;
+  /** When true, only topics with status 'completed' are offered (Revision mode). */
+  completedOnly?: boolean;
 }
 
 function shortLabel(raw: string): string {
@@ -29,10 +31,14 @@ export const SubtopicTargetPicker: React.FC<SubtopicTargetPickerProps> = ({
   onTopicChange,
   targets,
   onTargetsChange,
+  completedOnly = false,
 }) => {
   const subjectTopics = useMemo(
-    () => syllabusTopics.filter((t) => t.subject === subject),
-    [syllabusTopics, subject]
+    () =>
+      syllabusTopics.filter(
+        (t) => t.subject === subject && (!completedOnly || t.status === 'completed')
+      ),
+    [syllabusTopics, subject, completedOnly]
   );
 
   const currentTopic = useMemo(
@@ -84,7 +90,23 @@ export const SubtopicTargetPicker: React.FC<SubtopicTargetPickerProps> = ({
     return Math.round((sum / subs.length) * 10) / 10;
   }, [currentTopic, targetMap]);
 
-  if (subjectTopics.length === 0) return null;
+  if (subjectTopics.length === 0) {
+    if (completedOnly) {
+      return (
+        <div className="p-3 sm:p-3.5 rounded-2xl bg-teal-950/20 border border-teal-500/25 space-y-1.5">
+          <label className="text-teal-300 font-semibold flex items-center gap-1.5 text-xs">
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Syllabus Topic (completed only)</span>
+          </label>
+          <p className="text-[11px] text-slate-300 leading-relaxed">
+            🔁 Complete a topic first to unlock revision sessions — new topics can only be added as{' '}
+            <strong className="text-white">Study</strong> blocks.
+          </p>
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <div className="p-3 sm:p-3.5 rounded-2xl bg-cyan-950/20 border border-cyan-500/20 space-y-2.5">

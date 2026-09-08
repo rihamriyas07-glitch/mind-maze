@@ -16,6 +16,9 @@ export type TopicStatus = 'not_started' | 'in_progress' | 'completed';
 
 export type ReminderOffset = 0 | 10 | 15 | 30 | 60; // minutes before, 0 = at time
 
+/** Study vs Revision block. Revision is ONLY for already-completed topics. */
+export type BlockType = 'study' | 'revision';
+
 export interface StreakData {
   currentStreak: number;
   bestStreak: number;
@@ -34,6 +37,8 @@ export interface TimetableEntry {
   dayOfWeek: DayOfWeek;
   subject: string;
   topic: string;
+  /** 'study' (default) or 'revision' (only for already-completed topics). */
+  blockType?: BlockType;
   topicId?: string;         // Link to SyllabusTopic.id
   subtopic?: string;        // Specific subtopic name (legacy: first of subtopicTargets)
   targetProgress?: number;  // Planned completion percentage (0 - 100) for this block (legacy: first target)
@@ -53,6 +58,8 @@ export interface DailyTask {
   date: string; // "YYYY-MM-DD"
   title: string;
   subject: string;
+  /** 'study' (default) or 'revision' (only for already-completed topics). */
+  blockType?: BlockType;
   topicId?: string;         // Link to SyllabusTopic.id
   topicTitle?: string;      // Cached title of the syllabus topic
   subtopic?: string;        // Specific subtopic name (legacy: first of subtopicTargets)

@@ -850,10 +850,26 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
     );
   }
 
+  const goToLanding = () => {
+    if (typeof window === 'undefined') return;
+    if (window.location.pathname !== '/') {
+      window.history.pushState({}, '', '/');
+    }
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
   return (
     <div className="relative min-h-screen bg-[#0F1023] bg-[radial-gradient(circle_at_top_right,_#1a1b3d_0%,_#0F1023_100%)] text-slate-100 flex items-center justify-center px-4 py-10 font-['Poppins',sans-serif]">
       <div className="w-full max-w-md space-y-5">
         <div className="text-center space-y-3">
+          <button
+            type="button"
+            onClick={goToLanding}
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Home</span>
+          </button>
           <img
             src="/icon-192.png"
             alt="Mind Maze logo"

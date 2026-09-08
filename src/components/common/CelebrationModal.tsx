@@ -4,7 +4,7 @@ import confetti from 'canvas-confetti';
 
 export interface Celebration {
   id: string;
-  kind: 'day' | 'subject' | 'streak';
+  kind: 'day' | 'subject' | 'streak' | 'revision';
   emoji: string;
   title: string;
   message: string;

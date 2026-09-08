@@ -371,11 +371,13 @@ export interface CloudData {
 }
 
 function mapTimetableRow(r: Record<string, unknown>): TimetableEntry {
+  const rawBlock = (r.block_type as string) ?? (r as Record<string, unknown>).blockType;
   return {
     id: String(r.id),
     dayOfWeek: r.day_of_week as TimetableEntry['dayOfWeek'],
     subject: (r.subject as string) ?? '',
     topic: (r.topic as string) ?? '',
+    blockType: rawBlock === 'revision' ? 'revision' : 'study',
     topicId: (r.topic_id as string) ?? undefined,
     subtopic: (r.subtopic as string) ?? undefined,
     targetProgress: (r.target_progress as number) ?? undefined,
@@ -391,11 +393,13 @@ function mapTimetableRow(r: Record<string, unknown>): TimetableEntry {
 }
 
 function mapTaskRow(r: Record<string, unknown>): DailyTask {
+  const rawBlock = (r.block_type as string) ?? (r as Record<string, unknown>).blockType;
   return {
     id: String(r.id),
     date: String(r.date),
     title: (r.title as string) ?? '',
     subject: (r.subject as string) ?? '',
+    blockType: rawBlock === 'revision' ? 'revision' : 'study',
     topicId: (r.topic_id as string) ?? undefined,
     topicTitle: (r.topic_title as string) ?? undefined,
     subtopic: (r.subtopic as string) ?? undefined,
@@ -493,30 +497,34 @@ async function upsertAndPrune(
 }
 
 export async function pushTimetable(userId: string, entries: TimetableEntry[]): Promise<void> {
+  const withBlock = entries.map((e) => ({
+    id: e.id,
+    user_id: userId,
+    day_of_week: e.dayOfWeek,
+    subject: e.subject,
+    topic: e.topic,
+    block_type: e.blockType === 'revision' ? 'revision' : 'study',
+    topic_id: e.topicId ?? null,
+    subtopic: e.subtopic ?? null,
+    target_progress: e.targetProgress ?? null,
+    is_completed: e.isCompleted ?? false,
+    start_time: e.startTime,
+    end_time: e.endTime,
+    color: e.color,
+    reminder_enabled: e.reminderEnabled,
+    reminder_offset_minutes: e.reminderOffsetMinutes,
+    notes: e.notes ?? null,
+    from_task_id: e.fromTaskId ?? null,
+  }));
   try {
-    await upsertAndPrune(
-      'timetable_entries',
-      userId,
-      entries.map((e) => ({
-        id: e.id,
-        user_id: userId,
-        day_of_week: e.dayOfWeek,
-        subject: e.subject,
-        topic: e.topic,
-        topic_id: e.topicId ?? null,
-        subtopic: e.subtopic ?? null,
-        target_progress: e.targetProgress ?? null,
-        is_completed: e.isCompleted ?? false,
-        start_time: e.startTime,
-        end_time: e.endTime,
-        color: e.color,
-        reminder_enabled: e.reminderEnabled,
-        reminder_offset_minutes: e.reminderOffsetMinutes,
-        notes: e.notes ?? null,
-        from_task_id: e.fromTaskId ?? null,
-      }))
-    );
+    await upsertAndPrune('timetable_entries', userId, withBlock);
   } catch (err) {
+    // Pre-migration DBs lack block_type — retry without it so sync still works.
+    if (isMissingColumnError(err)) {
+      const fallback = withBlock.map(({ block_type: _drop, ...rest }) => rest);
+      await upsertAndPrune('timetable_entries', userId, fallback);
+      return;
+    }
     if (err instanceof CloudError) throw err;
     throw friendlyError('Could not sync your timetable.', err);
   }
@@ -524,30 +532,28 @@ export async function pushTimetable(userId: string, entries: TimetableEntry[]): 
 
 export async function pushTasks(userId: string, tasks: DailyTask[]): Promise<void> {
   const client = requireClient();
+  const withBlock = tasks.map((t) => ({
+    id: t.id,
+    user_id: userId,
+    date: t.date,
+    title: t.title,
+    subject: t.subject,
+    block_type: t.blockType === 'revision' ? 'revision' : 'study',
+    topic_id: t.topicId ?? null,
+    topic_title: t.topicTitle ?? null,
+    subtopic: t.subtopic ?? null,
+    target_progress: t.targetProgress ?? null,
+    is_completed: t.isCompleted,
+    completed_at: t.completedAt ?? null,
+    time_slot: t.timeSlot ?? null,
+    start_time: t.startTime ?? null,
+    end_time: t.endTime ?? null,
+    estimated_minutes: t.estimatedMinutes ?? null,
+    priority: t.priority,
+    from_timetable_id: t.fromTimetableId ?? null,
+  }));
   try {
-    await upsertAndPrune(
-      'daily_tasks',
-      userId,
-      tasks.map((t) => ({
-        id: t.id,
-        user_id: userId,
-        date: t.date,
-        title: t.title,
-        subject: t.subject,
-        topic_id: t.topicId ?? null,
-        topic_title: t.topicTitle ?? null,
-        subtopic: t.subtopic ?? null,
-        target_progress: t.targetProgress ?? null,
-        is_completed: t.isCompleted,
-        completed_at: t.completedAt ?? null,
-        time_slot: t.timeSlot ?? null,
-        start_time: t.startTime ?? null,
-        end_time: t.endTime ?? null,
-        estimated_minutes: t.estimatedMinutes ?? null,
-        priority: t.priority,
-        from_timetable_id: t.fromTimetableId ?? null,
-      }))
-    );
+    await upsertAndPrune('daily_tasks', userId, withBlock);
 
     // Maintain the per-day summary rows (daily_progress table).
     const byDate = new Map<string, { completed: number; total: number }>();
@@ -577,6 +583,17 @@ export async function pushTasks(userId: string, tasks: DailyTask[]): Promise<voi
       await client.from('daily_progress').delete().eq('user_id', userId).in('date', stale);
     }
   } catch (err) {
+    // Pre-migration DBs lack block_type — retry without it so sync still works.
+    if (isMissingColumnError(err)) {
+      const fallback = withBlock.map(({ block_type: _drop, ...rest }) => rest);
+      try {
+        await upsertAndPrune('daily_tasks', userId, fallback);
+        return;
+      } catch (retryErr) {
+        if (retryErr instanceof CloudError) throw retryErr;
+        throw friendlyError('Could not sync your daily tasks.', retryErr);
+      }
+    }
     if (err instanceof CloudError) throw err;
     throw friendlyError('Could not sync your daily tasks.', err);
   }
@@ -630,5 +647,46 @@ export async function pushStreak(
   } catch (err) {
     if (err instanceof CloudError) throw err;
     throw friendlyError('Could not sync your study streak.', err);
+  }
+}
+
+/** Revision habit counter stored on profiles.revision_count (separate stat). */
+export async function fetchRevisionCount(userId: string): Promise<number | null> {
+  try {
+    const { data, error } = await requireClient()
+      .from('profiles')
+      .select('revision_count')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) {
+      if (isMissingColumnError(error)) return null; // pre-migration DB
+      throw error;
+    }
+    const v = (data as { revision_count?: unknown } | null)?.revision_count;
+    return typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+  } catch (err) {
+    if (err instanceof CloudError) throw err;
+    throw friendlyError('Could not load your revision count.', err);
+  }
+}
+
+/** Persist the revision counter (additive only; never blocks the UI). */
+export async function updateProfileRevisionCount(userId: string, count: number): Promise<void> {
+  try {
+    const { error } = await requireClient()
+      .from('profiles')
+      .update({ revision_count: Math.max(0, Math.floor(count)) })
+      .eq('id', userId);
+    if (error) {
+      if (isMissingColumnError(error)) {
+        throw new CloudError(
+          'Revision count could not be saved: your database needs the revision update. Please run supabase/migration_add_revision_support.sql in the Supabase SQL Editor first.'
+        );
+      }
+      throw error;
+    }
+  } catch (err) {
+    if (err instanceof CloudError) throw err;
+    throw friendlyError('Could not save your revision count.', err);
   }
 }

@@ -53,24 +53,13 @@ function getRawStoredStreak(): { bestStreak: number; completedDates: string[]; l
     console.warn('Failed to parse streak from localStorage:', e);
   }
 
-  // Seed default streak data (e.g. 5 days to reflect an active A/L student)
-  const today = getTodayDateString();
-  const seededDates: string[] = [];
-  let curr = today;
-  for (let i = 0; i < 5; i++) {
-    seededDates.push(curr);
-    curr = getPreviousDateString(curr);
-  }
-
-  const initial = {
-    bestStreak: 7,
-    completedDates: seededDates,
-    lastCompletedDate: today,
+  // No stored streak: this student has no history yet. Start at zero —
+  // never seed fake demo days (a fresh account must show 0, not 5).
+  return {
+    bestStreak: 0,
+    completedDates: [],
+    lastCompletedDate: undefined,
   };
-  try {
-    localStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(initial));
-  } catch {}
-  return initial;
 }
 
 /**
@@ -82,6 +71,18 @@ function saveRawStoredStreak(data: { bestStreak: number; completedDates: string[
   } catch (e) {
     console.error('Failed to save streak to localStorage:', e);
   }
+}
+
+/**
+ * Wipe any stored streak history so a fresh account starts at 0.
+ * Needed because localStorage is shared per device across sign-outs —
+ * without this, a new signup on the same device would inherit the
+ * previous student's streak.
+ */
+export function clearStoredStreak(): void {
+  try {
+    localStorage.removeItem(STREAK_STORAGE_KEY);
+  } catch {}
 }
 
 /**

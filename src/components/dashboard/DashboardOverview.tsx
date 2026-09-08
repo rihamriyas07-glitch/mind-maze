@@ -18,6 +18,7 @@ import {
   Trophy,
   Volume2,
   Zap,
+  RefreshCw,
 } from 'lucide-react';
 import { getTodayDateString, getTodayDayOfWeek, getFormattedDateDisplay } from '../../lib/storage';
 import { getSubjectsForStream } from '../../data/alSyllabusData';
@@ -37,6 +38,8 @@ interface DashboardOverviewProps {
   dailyTasks: DailyTask[];
   syllabusTopics: SyllabusTopic[];
   streakData?: StreakData;
+  /** Separate additive habit stat: completed revision sessions (never affects syllabus %). */
+  revisionCount?: number;
   /** Expected A/L date "YYYY-MM-DD"; countdown hides when unset. */
   examDate?: string | null;
   /** Optional Z-score goal + motivation note for the goals strip. */
@@ -58,7 +61,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   timetableEntries,
   dailyTasks,
   syllabusTopics,
-  streakData = { currentStreak: 5, bestStreak: 7, completedDates: [], isCompletedToday: true },
+  streakData = { currentStreak: 0, bestStreak: 0, completedDates: [], isCompletedToday: false },
+  revisionCount = 0,
   notificationPermission,
   onRequestNotificationPermission,
   onTestSmartReminder,
@@ -343,6 +347,24 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 )}
               </div>
 
+              {/* Revision habit badge (separate additive stat) */}
+              <div
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide border transition-all ${
+                  revisionCount > 0
+                    ? 'bg-teal-500/15 border-teal-400/40 text-teal-200 shadow-[0_0_15px_rgba(45,212,191,0.25)]'
+                    : 'bg-white/5 border-white/10 text-slate-400'
+                }`}
+                title="Revision sessions completed — additive bonus only. Revising never changes syllabus % and never penalizes you."
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${revisionCount > 0 ? 'text-teal-300' : 'text-slate-500'}`} />
+                <span>🔁 {revisionCount} revision{revisionCount === 1 ? '' : 's'} done</span>
+                {revisionCount > 0 && (
+                  <span className="text-[10px] bg-teal-500/25 text-teal-200 px-1.5 py-0.5 rounded-full font-bold border border-teal-500/30">
+                    Great habit ✓
+                  </span>
+                )}
+              </div>
+
               {/* Physical Science 3rd subject indicator (read-only; change in Settings) */}
               {(stream === 'Physical Science' || (stream as string) === 'Maths') && (
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 border border-white/15 text-xs">
@@ -502,6 +524,29 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </div>
 
+      {/* Revision habit strip — additive bonus stat, separate from syllabus % */}
+      <div className="rounded-2xl border border-teal-400/30 bg-gradient-to-r from-teal-500/10 via-[#141A33] to-[#141A33] p-4 sm:p-5 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-teal-500/20 text-teal-300 shrink-0">
+            <RefreshCw className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-xs sm:text-sm font-bold text-teal-200">
+              🔁 {revisionCount} revision{revisionCount === 1 ? '' : 's'} done — revising keeps it fresh!
+            </h4>
+            <p className="text-[11px] text-slate-300 mt-0.5">
+              Revision is a bonus habit: it never changes syllabus % and never penalizes you. Mark a completed topic&apos;s Revision block done to grow this counter.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => onNavigate('daily')}
+          className="px-3.5 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/40 text-xs font-bold text-teal-200 transition cursor-pointer shrink-0 min-h-[40px]"
+        >
+          Revise a completed topic
+        </button>
+      </div>
+
       {/* Main Two-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Columns: Today's Tasks & Next Study Block */}
@@ -569,6 +614,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-slate-300 mr-2">
                           {task.subject}
                         </span>
+                        {task.blockType === 'revision' && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-500/15 text-teal-200 border border-teal-400/40 mr-2">
+                            🔁 Revision
+                          </span>
+                        )}
                         <span
                           className={`text-xs sm:text-sm font-medium ${
                             task.isCompleted ? 'text-slate-400 line-through' : 'text-white'
@@ -629,7 +679,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 {todayBlocks.map((block) => (
                   <div
                     key={block.id}
-                    className="p-3.5 rounded-2xl border border-white/10 bg-white/5 hover:border-cyan-400/40 transition flex flex-col justify-between"
+                    className={`p-3.5 rounded-2xl border transition flex flex-col justify-between ${
+                      block.blockType === 'revision'
+                        ? 'border-teal-400/40 bg-teal-500/[0.07] hover:border-teal-300/60'
+                        : 'border-white/10 bg-white/5 hover:border-cyan-400/40'
+                    }`}
                   >
                     <div>
                       <div className="flex items-center justify-between text-xs mb-1.5">
@@ -644,7 +698,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                           </span>
                         )}
                       </div>
-                      <span className="text-xs font-bold text-white block">{block.subject}</span>
+                      <span className="text-xs font-bold text-white block">
+                        {block.subject}
+                        {block.blockType === 'revision' && (
+                          <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-500/15 text-teal-200 border border-teal-400/40">
+                            🔁 Revision
+                          </span>
+                        )}
+                      </span>
                       <p className="text-xs text-slate-300 line-clamp-2 mt-0.5">{block.topic}</p>
                     </div>
 

@@ -27,6 +27,7 @@ import {
 } from './lib/notificationService';
 import {
   calculateStreak,
+  clearStoredStreak,
   recordTaskCompletionAndRefreshStreak,
   recordAppActivity,
   checkAndSendPeriodicNudge,
@@ -47,8 +48,6 @@ import { DailyStudyPlanner } from './components/daily/DailyStudyPlanner';
 import { TopicTracker } from './components/topics/TopicTracker';
 import { ProgressAnalytics } from './components/progress/ProgressAnalytics';
 import {
-  INITIAL_TIMETABLE_ENTRIES,
-  INITIAL_SYLLABUS_TOPICS,
   getInitialTimetableForStream,
 } from './data/alSyllabusData';
 import {
@@ -57,6 +56,14 @@ import {
   markTopicsCompleted,
   calculateSubjectProgression,
 } from './lib/syllabusProgression';
+import {
+  getRevisionStats,
+  recordRevisionCompletion,
+  undoRevisionCompletion,
+  saveRevisionStats,
+  normalizeBlockType,
+  RevisionStats,
+} from './lib/revisionService';
 import { supabase, isSupabaseConfigured } from './lib/supabaseClient';
 import {
   fetchUserProfile,
@@ -70,6 +77,8 @@ import {
   updateProfileElective,
   updateProfileExamDate,
   updateProfileGoals,
+  fetchRevisionCount,
+  updateProfileRevisionCount,
   toElective,
   toExamDate,
   PhysicalElective,
@@ -149,6 +158,7 @@ export default function App() {
   const [syllabusTopics, setSyllabusTopics] = useState<SyllabusTopic[]>(() => getStoredSyllabusTopics());
   const [settings, setSettings] = useState<UserSettings>(() => getUserSettings());
   const [streakData, setStreakData] = useState<StreakData>(() => calculateStreak(getStoredDailyTasks()));
+  const [revisionStats, setRevisionStats] = useState<RevisionStats>(() => getRevisionStats());
 
   // ---- Supabase Auth + Cloud Sync state ----
   const [authUserId, setAuthUserId] = useState<string | null>(null);
@@ -255,51 +265,33 @@ export default function App() {
     return () => window.removeEventListener('popstate', syncRoute);
   }, []);
 
-  // Route guards:
+  // Route guards (session is the ONLY thing that grants app access):
   // - Signed-in visitor on "/", "/login" or "/signup" -> redirect to /dashboard.
   // - Signed-out visitor on a protected route (e.g. /dashboard) -> /login.
   // - Signed-out visitor on "/" stays on the public landing page.
+  // There is intentionally no "local-only bypass": without a valid session
+  // the Dashboard is never rendered, so demo/default data can never leak
+  // to a signed-out visitor.
   useEffect(() => {
     if (!authChecked || cloudLoading) return;
-    const signedInReady = !isSupabaseConfigured || (!!authUserId && !!username);
+    const signedInReady = !!authUserId && !!username;
     if (signedInReady) {
       if (routePath === '/' || routePath === '/login' || routePath === '/signup') {
         navigateTo(SCREEN_PATHS[currentScreen]);
       }
       return;
     }
-    if (isSupabaseConfigured && !authUserId && screenForPath(routePath)) {
+    if (!authUserId && screenForPath(routePath)) {
       navigateTo('/login');
     }
   }, [authChecked, cloudLoading, authUserId, username, routePath, currentScreen]);
 
-  // On initial mount: register service worker & auto-seed today's tasks from timetable if empty
+  // On initial mount: register service worker only.
+  // NOTE: no auto-seeding — fresh accounts must start with 0 timetable
+  // blocks and 0 daily tasks. Students add blocks explicitly or via the
+  // "Sync from timetable" button in the Daily Planner.
   useEffect(() => {
     registerServiceWorker();
-
-    const todayStr = getTodayDateString();
-    const todayDayOfWeek = getTodayDayOfWeek();
-    const existingTodayTasks = dailyTasks.filter((t) => t.date === todayStr);
-
-    if (existingTodayTasks.length === 0) {
-      // Auto-import today's timetable sessions
-      const todayBlocks = timetableEntries.filter((e) => e.dayOfWeek === todayDayOfWeek);
-      if (todayBlocks.length > 0) {
-        const seeded: DailyTask[] = todayBlocks.map((b, idx) => ({
-          id: `task-auto-${todayStr}-${idx}-${Date.now()}`,
-          date: todayStr,
-          title: `${b.topic} (${b.startTime} - ${b.endTime})`,
-          subject: b.subject,
-          isCompleted: false,
-          estimatedMinutes: 90,
-          priority: 'High',
-        }));
-        const updated = [...dailyTasks, ...seeded];
-        setDailyTasks(updated);
-        saveStoredDailyTasks(updated);
-        setStreakData(calculateStreak(updated));
-      }
-    }
   }, []);
 
   // ---- Supabase session handling + cloud load/merge ----
@@ -457,20 +449,68 @@ export default function App() {
       //    otherwise this device's local data is uploaded (first-login migration).
       const cloud = await loadCloudData(userId);
 
-      if (cloud.hasTimetable) {
-        setTimetableEntries(cloud.timetable);
-        saveStoredTimetable(cloud.timetable);
-      } else if (timetableEntriesRef.current.length > 0) {
-        await pushTimetable(userId, timetableEntriesRef.current);
-      }
+      // Brand-new signup = no timetable rows, no daily-task rows and no
+      // streak row in the cloud. Start with 0 timetable blocks, 0 daily
+      // tasks and a 0-day streak — never inherit demo data or a previous
+      // student's local data from a shared device.
+      // NOTE: topics are intentionally excluded — the sign-up flow itself
+      // seeds topic rows for the student's own "already completed" picks
+      // before this first load runs, and those must be kept.
+      const isFreshAccount =
+        !cloud.hasTimetable && !cloud.hasTasks && cloud.streak === null;
 
-      let mergedTasks = dailyTasksRef.current;
-      if (cloud.hasTasks) {
-        mergedTasks = cloud.tasks;
-        setDailyTasks(cloud.tasks);
-        saveStoredDailyTasks(cloud.tasks);
-      } else if (dailyTasksRef.current.length > 0) {
-        await pushTasks(userId, dailyTasksRef.current);
+      let mergedTasks: DailyTask[] = dailyTasksRef.current;
+      if (isFreshAccount) {
+        clearStoredStreak();
+        setTimetableEntries([]);
+        saveStoredTimetable([]);
+        setDailyTasks([]);
+        saveStoredDailyTasks([]);
+        mergedTasks = [];
+        const zeroRevision = saveRevisionStats({ revisionCount: 0, revisionDates: [], lastRevisionDate: undefined });
+        setRevisionStats(zeroRevision);
+        const zeroStreak = calculateStreak([]);
+        setStreakData(zeroStreak);
+        try {
+          await pushTimetable(userId, []);
+        } catch (err) {
+          console.warn('Fresh-account timetable reset failed:', err);
+        }
+        try {
+          await pushTasks(userId, []);
+        } catch (err) {
+          console.warn('Fresh-account tasks reset failed:', err);
+        }
+        try {
+          await pushStreak(userId, {
+            currentStreak: 0,
+            bestStreak: 0,
+            lastCompletedDate: undefined,
+            completedDates: [],
+          });
+        } catch (err) {
+          console.warn('Fresh-account streak reset failed:', err);
+        }
+        try {
+          await updateProfileRevisionCount(userId, 0);
+        } catch {
+          // Pre-migration DB or offline — non-fatal, stays 0 locally.
+        }
+      } else {
+        if (cloud.hasTimetable) {
+          setTimetableEntries(cloud.timetable);
+          saveStoredTimetable(cloud.timetable);
+        } else if (timetableEntriesRef.current.length > 0) {
+          await pushTimetable(userId, timetableEntriesRef.current);
+        }
+
+        if (cloud.hasTasks) {
+          mergedTasks = cloud.tasks;
+          setDailyTasks(cloud.tasks);
+          saveStoredDailyTasks(cloud.tasks);
+        } else if (dailyTasksRef.current.length > 0) {
+          await pushTasks(userId, dailyTasksRef.current);
+        }
       }
 
       if (cloud.topics) {
@@ -508,33 +548,59 @@ export default function App() {
 
       // 3. Merge streak history (union of completed dates across devices),
       //    then recalculate with the existing streak logic.
-      if (cloud.streak) {
-        try {
-          const KEY = 'mindmaze_study_streak_v2';
-          const raw = localStorage.getItem(KEY);
-          const parsed = raw ? JSON.parse(raw) : { bestStreak: 0, completedDates: [] };
-          const dateSet = new Set<string>([
-            ...(Array.isArray(parsed.completedDates) ? parsed.completedDates : []),
-            ...cloud.streak.completedDates,
-          ]);
-          localStorage.setItem(
-            KEY,
-            JSON.stringify({
-              bestStreak: Math.max(parsed.bestStreak ?? 0, cloud.streak.longestStreak),
-              completedDates: Array.from(dateSet).sort(),
-              lastCompletedDate: parsed.lastCompletedDate ?? cloud.streak.lastCompletedDate,
-            })
-          );
-        } catch {}
+      //    Skipped for fresh accounts — already zeroed above.
+      if (!isFreshAccount) {
+        if (cloud.streak) {
+          try {
+            const KEY = 'mindmaze_study_streak_v2';
+            const raw = localStorage.getItem(KEY);
+            const parsed = raw ? JSON.parse(raw) : { bestStreak: 0, completedDates: [] };
+            const dateSet = new Set<string>([
+              ...(Array.isArray(parsed.completedDates) ? parsed.completedDates : []),
+              ...cloud.streak.completedDates,
+            ]);
+            localStorage.setItem(
+              KEY,
+              JSON.stringify({
+                bestStreak: Math.max(parsed.bestStreak ?? 0, cloud.streak.longestStreak),
+                completedDates: Array.from(dateSet).sort(),
+                lastCompletedDate: parsed.lastCompletedDate ?? cloud.streak.lastCompletedDate,
+              })
+            );
+          } catch {}
+        }
+        const freshStreak = calculateStreak(mergedTasks);
+        setStreakData(freshStreak);
+        await pushStreak(userId, {
+          currentStreak: freshStreak.currentStreak,
+          bestStreak: freshStreak.bestStreak,
+          lastCompletedDate: freshStreak.lastCompletedDate,
+          completedDates: freshStreak.completedDates,
+        });
       }
-      const freshStreak = calculateStreak(mergedTasks);
-      setStreakData(freshStreak);
-      await pushStreak(userId, {
-        currentStreak: freshStreak.currentStreak,
-        bestStreak: freshStreak.bestStreak,
-        lastCompletedDate: freshStreak.lastCompletedDate,
-        completedDates: freshStreak.completedDates,
-      });
+
+      // 4. Revision counter: cloud wins when larger (additive habit stat).
+      //    Skipped for fresh accounts — already zeroed above.
+      if (!isFreshAccount) {
+        try {
+          const cloudRevisions = await fetchRevisionCount(userId);
+          if (cloudRevisions !== null) {
+            const local = getRevisionStats();
+            if (cloudRevisions > local.revisionCount) {
+              const merged = saveRevisionStats({
+                revisionCount: cloudRevisions,
+                revisionDates: local.revisionDates,
+                lastRevisionDate: local.lastRevisionDate,
+              });
+              setRevisionStats(merged);
+            } else if (local.revisionCount > cloudRevisions) {
+              await updateProfileRevisionCount(userId, local.revisionCount).catch(() => undefined);
+            }
+          }
+        } catch (err) {
+          console.warn('Revision count sync failed:', err);
+        }
+      }
 
       loadedUidRef.current = userId;
       setCloudSyncOn(true);
@@ -564,6 +630,16 @@ export default function App() {
       setCloudLoading(false);
       setCloudError(null);
       setSignupStream(null);
+      // Clear per-device study mirrors so the next signup on this shared
+      // device starts with 0 blocks and a 0-day streak (the signed-out
+      // student's data remains safe in the cloud and reloads on sign-in).
+      clearStoredStreak();
+      setTimetableEntries([]);
+      saveStoredTimetable([]);
+      setDailyTasks([]);
+      saveStoredDailyTasks([]);
+      setStreakData({ currentStreak: 0, bestStreak: 0, completedDates: [], isCompletedToday: false });
+      setRevisionStats(saveRevisionStats({ revisionCount: 0, revisionDates: [], lastRevisionDate: undefined }));
       setAuthChecked(true);
       return;
     }
@@ -583,7 +659,11 @@ export default function App() {
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
-      setAuthChecked(true); // Local-only mode: no gate, straight into the app.
+      // No backend configured: stay signed out. The render gate below shows
+      // the public landing page at "/" — never the Dashboard — until a real
+      // session exists. (SupabaseAuth renders a "not configured" notice on
+      // /login and /signup in this state.)
+      setAuthChecked(true);
       return;
     }
     supabase.auth.getSession().then(({ data }) => {
@@ -683,6 +763,17 @@ export default function App() {
     }
   };
 
+  /** Best-effort cloud mirror of the revision counter (never blocks UI). */
+  async function syncRevisionCountToCloud(count: number) {
+    const uid = authUserIdRef.current;
+    if (!uid || !isSupabaseConfigured || !supabase) return;
+    try {
+      await updateProfileRevisionCount(uid, count);
+    } catch (err) {
+      console.warn('Revision count cloud sync failed:', err);
+    }
+  }
+
   // Periodic reminder checker every 30 seconds (timetable alerts + nudges + daily countdown)
   useEffect(() => {
     const interval = setInterval(() => {
@@ -762,6 +853,7 @@ export default function App() {
 
     const entryWithId: TimetableEntry = {
       ...entryData,
+      blockType: normalizeBlockType(entryData.blockType),
       id: timetableId,
       fromTaskId: syncToDailyPlanner ? taskId : undefined,
     };
@@ -778,6 +870,7 @@ export default function App() {
         date: correspondingDate,
         title: newEntry.topic,
         subject: newEntry.subject,
+        blockType: normalizeBlockType(newEntry.blockType),
         topicId: newEntry.topicId,
         topicTitle: newEntry.topic,
         subtopic: newEntry.subtopic,
@@ -803,33 +896,35 @@ export default function App() {
   };
 
   const handleUpdateTimetableEntry = (updatedEntry: TimetableEntry) => {
-    const updated = timetableEntries.map((e) => (e.id === updatedEntry.id ? updatedEntry : e));
+    const normalized = { ...updatedEntry, blockType: normalizeBlockType(updatedEntry.blockType) };
+    const updated = timetableEntries.map((e) => (e.id === normalized.id ? normalized : e));
     setTimetableEntries(updated);
     saveStoredTimetable(updated);
 
     // If there is an associated linked task in the Daily Planner, update it in sync
     const hasLinkedTask = dailyTasks.some(
-      (t) => t.fromTimetableId === updatedEntry.id || (updatedEntry.fromTaskId && t.id === updatedEntry.fromTaskId)
+      (t) => t.fromTimetableId === normalized.id || (normalized.fromTaskId && t.id === normalized.fromTaskId)
     );
 
     if (hasLinkedTask) {
-      const estMinutes = calculateMinutesBetween(updatedEntry.startTime, updatedEntry.endTime);
-      const newDate = getDateForDayOfWeekInCurrentWeek(updatedEntry.dayOfWeek);
+      const estMinutes = calculateMinutesBetween(normalized.startTime, normalized.endTime);
+      const newDate = getDateForDayOfWeekInCurrentWeek(normalized.dayOfWeek);
       const updatedTasks = dailyTasks.map((t) => {
-        if (t.fromTimetableId === updatedEntry.id || (updatedEntry.fromTaskId && t.id === updatedEntry.fromTaskId)) {
+        if (t.fromTimetableId === normalized.id || (normalized.fromTaskId && t.id === normalized.fromTaskId)) {
           return {
             ...t,
             date: newDate,
-            title: updatedEntry.topic,
-            subject: updatedEntry.subject,
-            topicId: updatedEntry.topicId ?? t.topicId,
-            topicTitle: updatedEntry.topic,
-            subtopic: updatedEntry.subtopic,
-            targetProgress: updatedEntry.targetProgress,
-            subtopicTargets: updatedEntry.subtopicTargets,
-            timeSlot: `${updatedEntry.startTime} - ${updatedEntry.endTime}`,
-            startTime: updatedEntry.startTime,
-            endTime: updatedEntry.endTime,
+            title: normalized.topic,
+            subject: normalized.subject,
+            blockType: normalizeBlockType(normalized.blockType),
+            topicId: normalized.topicId ?? t.topicId,
+            topicTitle: normalized.topic,
+            subtopic: normalized.subtopic,
+            targetProgress: normalized.targetProgress,
+            subtopicTargets: normalized.subtopicTargets,
+            timeSlot: `${normalized.startTime} - ${normalized.endTime}`,
+            startTime: normalized.startTime,
+            endTime: normalized.endTime,
             estimatedMinutes: estMinutes,
           };
         }
@@ -837,7 +932,7 @@ export default function App() {
       });
       setDailyTasks(updatedTasks);
       saveStoredDailyTasks(updatedTasks);
-      setSyncToastMessage(`🔗 Updated linked task in Daily Planner for ${updatedEntry.dayOfWeek}`);
+      setSyncToastMessage(`🔗 Updated linked task in Daily Planner for ${normalized.dayOfWeek}`);
     }
   };
 
@@ -872,12 +967,39 @@ export default function App() {
     const entry = timetableEntries.find((e) => e.id === entryId);
     if (!entry) return;
     const willBeCompleted = !entry.isCompleted;
+    const blockType = normalizeBlockType(entry.blockType);
 
     const updated = timetableEntries.map((e) =>
       e.id === entryId ? { ...e, isCompleted: willBeCompleted } : e
     );
     setTimetableEntries(updated);
     saveStoredTimetable(updated);
+
+    // Revision bonus: additive reward, syllabus % untouched.
+    if (blockType === 'revision') {
+      if (willBeCompleted) {
+        const next = recordRevisionCompletion(getTodayDateString());
+        setRevisionStats(next);
+        void syncRevisionCountToCloud(next.revisionCount);
+        playStudyChime();
+        pushCelebration({
+          kind: 'revision',
+          emoji: '🔁',
+          title: 'Great habit! Revising keeps it fresh 🔁',
+          message: `Revision session done — that's ${next.revisionCount} revision${next.revisionCount === 1 ? '' : 's'} banked. Small reps, big A/L recall.`,
+          stats: [
+            { label: 'Revisions', value: String(next.revisionCount) },
+            { label: 'Day streak', value: `${streakData.currentStreak}d` },
+            { label: 'Syllabus %', value: 'unchanged' },
+          ],
+        });
+      } else {
+        const next = undoRevisionCompletion();
+        setRevisionStats(next);
+        void syncRevisionCountToCloud(next.revisionCount);
+      }
+      return;
+    }
 
     // Sync syllabus progress if entry has topic or subtopic
     const syncRes = updateSyllabusFromBlockCompletion(syllabusTopics, {
@@ -888,6 +1010,7 @@ export default function App() {
       subtopicTargets: entry.subtopicTargets,
       subject: entry.subject,
       isCompleted: willBeCompleted,
+      blockType,
     });
 
     if (syncRes.changeMessage) {
@@ -916,6 +1039,23 @@ export default function App() {
     const targetTask = dailyTasks.find((t) => t.id === taskId);
     if (!targetTask) return;
     const willBeCompleted = !targetTask.isCompleted;
+    const taskBlockType = normalizeBlockType(targetTask.blockType);
+
+    // Revision bonus path: distinct celebration + counter, syllabus % untouched.
+    // Streak still updates (additive reward, never a penalty).
+    let revisionTotal: number | null = null;
+    if (taskBlockType === 'revision') {
+      if (willBeCompleted) {
+        const next = recordRevisionCompletion(getTodayDateString());
+        setRevisionStats(next);
+        revisionTotal = next.revisionCount;
+        void syncRevisionCountToCloud(next.revisionCount);
+      } else {
+        const next = undoRevisionCompletion();
+        setRevisionStats(next);
+        void syncRevisionCountToCloud(next.revisionCount);
+      }
+    }
 
     const updated = dailyTasks.map((t) =>
       t.id === taskId
@@ -943,7 +1083,21 @@ export default function App() {
     setStreakData(newStreak);
 
     if (willBeCompleted && targetTask.date === todayStr) {
-      if (!wasAllDoneBefore && isAllDoneNow) {
+      if (taskBlockType === 'revision' && revisionTotal !== null) {
+        // Distinct revision micro-celebration (on top of the normal flow).
+        playStudyChime();
+        pushCelebration({
+          kind: 'revision',
+          emoji: '🔁',
+          title: 'Great habit! Revising keeps it fresh 🔁',
+          message: `Revision session done — ${revisionTotal} revision${revisionTotal === 1 ? '' : 's'} banked in total. Your syllabus % stays exactly where it was.`,
+          stats: [
+            { label: 'Revisions', value: String(revisionTotal) },
+            { label: 'Day streak', value: `${newStreak.currentStreak}d` },
+            { label: 'Done today', value: `${newTodayTasks.filter((t) => t.isCompleted).length}/${newTodayTasks.length}` },
+          ],
+        });
+      } else if (!wasAllDoneBefore && isAllDoneNow) {
         // Full-day-complete modal with stats + congratulatory notification.
         const congrats = generateCompletionCelebration({
           currentStreak: newStreak.currentStreak,
@@ -993,6 +1147,7 @@ export default function App() {
     }
 
     // Bi-directionally update syllabus progress if this task corresponds to a syllabus topic or subtopic
+    // (Revision blocks skip this entirely — percentages never move on revision.)
     const syncRes = updateSyllabusFromBlockCompletion(syllabusTopics, {
       topicId: targetTask.topicId,
       topicTitle: targetTask.topicTitle || targetTask.title,
@@ -1001,6 +1156,7 @@ export default function App() {
       subtopicTargets: targetTask.subtopicTargets,
       subject: targetTask.subject,
       isCompleted: willBeCompleted,
+      blockType: taskBlockType,
     });
 
     if (syncRes.changeMessage) {
@@ -1038,6 +1194,7 @@ export default function App() {
 
     const taskWithId: DailyTask = {
       ...taskData,
+      blockType: normalizeBlockType(taskData.blockType),
       id: taskId,
       fromTimetableId: syncToTimetable ? timetableId : undefined,
     };
@@ -1056,6 +1213,7 @@ export default function App() {
         id: timetableId,
         dayOfWeek,
         subject: newTask.subject,
+        blockType: normalizeBlockType(newTask.blockType),
         topic: newTask.title,
         topicId: newTask.topicId,
         subtopic: newTask.subtopic,
@@ -1120,6 +1278,7 @@ export default function App() {
         date: dateStr,
         title: b.topic,
         subject: b.subject,
+        blockType: normalizeBlockType(b.blockType),
         topicId: b.topicId,
         topicTitle: b.topic,
         subtopic: b.subtopic,
@@ -1304,6 +1463,15 @@ export default function App() {
     else navigateTo('/signup');
   };
 
+  // Tiny branded pause for the public landing page: after ~600ms the
+  // landing renders immediately without waiting for the session check.
+  // (App screens still wait for auth + cloud sync as before.)
+  const [landingReady, setLandingReady] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setLandingReady(true), 600);
+    return () => clearTimeout(t);
+  }, []);
+
   // Today pending count for bottom nav badge
   const todayDate = getTodayDateString();
   const pendingCount = dailyTasks.filter((t) => t.date === todayDate && !t.isCompleted).length;
@@ -1329,12 +1497,37 @@ export default function App() {
     </div>
   );
 
-  // ---- Auth gate & cloud loading states (Supabase configured only) ----
+  // ---- Auth gate & cloud loading states ----
+  // Strict rule: without a valid session (authUserId), only the public
+  // landing page ("/") or the auth screens are ever rendered. The Dashboard
+  // and all other app screens require a real Supabase session, regardless of
+  // any cached localStorage data or default settings.
+  // Exception: the public landing page renders after a tiny (~600ms)
+  // branded pause without waiting for the session check, so it feels
+  // instant. A signed-in visitor is still redirected to /dashboard as soon
+  // as the session resolves (see the route-guard effect above).
+  const renderLandingPage = () => (
+    <LandingPage
+      onNavigate={handleLandingNavigate}
+      onSelectStreamAndStart={(stream) => {
+        // Landing-page stream tap becomes this device's default and
+        // pre-selects the signup form's stream picker.
+        handleSelectStream(stream);
+        setSignupStream(stream === 'Bio' ? 'Biological Science' : 'Physical Science');
+        navigateTo('/signup');
+      }}
+      onOpenAuth={(mode) => navigateTo(mode === 'signup' ? '/signup' : '/login')}
+    />
+  );
+
   if (!authChecked) {
+    if (routePath === '/' && landingReady) {
+      return renderLandingPage();
+    }
     return splash('Loading Mind Maze…');
   }
 
-  if (isSupabaseConfigured && authView === 'update-password') {
+  if (authView === 'update-password' && authUserId) {
     return (
       <SupabaseAuth
         view="update-password"
@@ -1355,22 +1548,10 @@ export default function App() {
     );
   }
 
-  if (isSupabaseConfigured && !authUserId) {
+  if (!authUserId) {
     // Public landing page for signed-out visitors at "/".
     if (routePath === '/') {
-      return (
-        <LandingPage
-          onNavigate={handleLandingNavigate}
-          onSelectStreamAndStart={(stream) => {
-            // Landing-page stream tap becomes this device's default and
-            // pre-selects the signup form's stream picker.
-            handleSelectStream(stream);
-            setSignupStream(stream === 'Bio' ? 'Biological Science' : 'Physical Science');
-            navigateTo('/signup');
-          }}
-          onOpenAuth={(mode) => navigateTo(mode === 'signup' ? '/signup' : '/login')}
-        />
-      );
+      return renderLandingPage();
     }
     // "/login", "/signup", and protected routes (e.g. "/dashboard") all show
     // the login screen until the visitor signs in.
@@ -1490,6 +1671,7 @@ export default function App() {
             dailyTasks={dailyTasks}
             syllabusTopics={syllabusTopics}
             streakData={streakData}
+            revisionCount={revisionStats.revisionCount}
             examDate={settings.targetExamDate || null}
             targetZScore={settings.targetZScore || null}
             motivationNote={settings.motivationNote || null}
@@ -1552,6 +1734,7 @@ export default function App() {
             timetableEntries={timetableEntries}
             dailyTasks={dailyTasks}
             settings={settings}
+            revisionCount={revisionStats.revisionCount}
           />
         )}
 

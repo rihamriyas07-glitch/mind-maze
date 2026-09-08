@@ -259,13 +259,22 @@ export function updateSyllabusFromBlockCompletion(
     subtopicTargets?: { subtopic: string; targetProgress: number }[];
     subject?: string;
     isCompleted: boolean;
+    /** When 'revision', syllabus % is intentionally left untouched. */
+    blockType?: 'study' | 'revision';
   }
 ): {
   updatedTopics: SyllabusTopic[];
   changedTopic?: SyllabusTopic;
   changeMessage?: string;
 } {
-  const { topicId, topicTitle, subtopic, targetProgress, subtopicTargets, subject, isCompleted } = opts;
+  const { topicId, topicTitle, subtopic, targetProgress, subtopicTargets, subject, isCompleted, blockType } = opts;
+
+  // Revision sessions never move syllabus percentages (they must not push a
+  // subject beyond 100% or alter first-time completion math). The bonus is
+  // tracked separately via the revision counter.
+  if (blockType === 'revision') {
+    return { updatedTopics: topics };
+  }
 
   // Normalize to a canonical list of { subtopic, targetProgress }.
   // Prefers the multi-target array, falls back to the legacy single fields.

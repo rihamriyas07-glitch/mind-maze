@@ -121,7 +121,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 onClick={() => (onOpenAuth ? onOpenAuth('signup') : onNavigate('study-plan'))}
                 className="group relative flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] px-8 py-4 text-base font-bold text-white shadow-[0_0_20px_rgba(107,78,255,0.4)] transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
-                <span>Get Started (Choose Stream)</span>
+                <span>Get Access</span>
                 <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
               </button>
             </div>

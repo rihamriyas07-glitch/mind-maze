@@ -26,6 +26,8 @@ interface ProgressAnalyticsProps {
   timetableEntries: TimetableEntry[];
   dailyTasks: DailyTask[];
   settings: UserSettings;
+  /** Separate additive habit stat (completing revisions never moves syllabus %). */
+  revisionCount?: number;
 }
 
 export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
@@ -34,6 +36,7 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
   timetableEntries,
   dailyTasks,
   settings,
+  revisionCount = 0,
 }) => {
   const weeklyGoal = settings.weeklyHoursGoal;
 
@@ -173,6 +176,25 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
           <p className="text-[11px] text-slate-400">
             Consistent daily execution is the #1 predictor of GCE A/L district merit.
           </p>
+        </div>
+      </div>
+
+      {/* Revision habit stat — additive bonus, separate from syllabus % */}
+      <div className="rounded-2xl border border-teal-400/30 bg-teal-500/[0.07] p-5 backdrop-blur-md shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wider text-teal-300">🔁 Revision habit (bonus only)</div>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-3xl font-black text-white">{revisionCount}</span>
+            <span className="text-xs text-slate-300">revision{revisionCount === 1 ? '' : 's'} completed</span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">
+            Tracked separately from first-time topic completions — revising never pushes a subject beyond 100% and never penalizes you.
+          </p>
+        </div>
+        <div className="text-[11px] text-teal-200/90 font-semibold shrink-0">
+          {revisionCount === 0
+            ? 'Mark a topic completed, then add a Revision block to start.'
+            : 'Great habit! Revising keeps it fresh 🔁'}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { DailyTask, StreamType, SubtopicTarget, TimetableEntry, SyllabusTopic } from '../../types';
+import { DailyTask, StreamType, SubtopicTarget, TimetableEntry, SyllabusTopic, BlockType } from '../../types';
 import {
   CheckCircle2,
   Circle,
@@ -17,6 +17,8 @@ import {
   Trophy,
   BookOpen,
   Link,
+  RefreshCw,
+  GraduationCap,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -70,6 +72,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
   // Form states
   const [newTitle, setNewTitle] = useState('');
   const [newSubject, setNewSubject] = useState(availableSubjects[0]?.name || 'Physics');
+  const [newBlockType, setNewBlockType] = useState<BlockType>('study');
   const [selectedTopicId, setSelectedTopicId] = useState('');
   const [selectedTargets, setSelectedTargets] = useState<SubtopicTarget[]>([]);
   const [newEstimatedMinutes, setNewEstimatedMinutes] = useState(60);
@@ -119,9 +122,22 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
     if (topicId) {
       const tObj = syllabusTopics.find((t) => t.id === topicId);
       if (tObj && !newTitle.trim()) {
-        setNewTitle(`Revise ${tObj.topicTitle}`);
+        setNewTitle(newBlockType === 'revision' ? `Revise ${tObj.topicTitle}` : tObj.topicTitle);
       }
     }
+  };
+
+  const completedTopicsCount = syllabusTopics.filter((t) => t.status === 'completed').length;
+  const completedForSubjectCount = syllabusTopics.filter(
+    (t) => t.subject === newSubject && t.status === 'completed'
+  ).length;
+  const revisionLockedGlobally = completedTopicsCount === 0;
+
+  const handleBlockTypeChange = (next: BlockType) => {
+    if (next === 'revision' && revisionLockedGlobally) return;
+    setNewBlockType(next);
+    setSelectedTopicId('');
+    setSelectedTargets([]);
   };
 
   const handleCreateTask = (e: React.FormEvent) => {
@@ -141,6 +157,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
       date: selectedDate,
       title: newTitle.trim(),
       subject: newSubject,
+      blockType: newBlockType,
       topicId: selectedTopicId || undefined,
       topicTitle: matchedTopic?.topicTitle || undefined,
       subtopic: first?.subtopic,
@@ -156,6 +173,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
     });
 
     setNewTitle('');
+    setNewBlockType('study');
     setSelectedTopicId('');
     setSelectedTargets([]);
     setIsAddTaskModalOpen(false);
@@ -169,6 +187,12 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
   const handleMinutesChange = (mins: number) => {
     setNewEstimatedMinutes(mins);
     setNewEndTime(computeEndTime(newStartTime, mins));
+  };
+
+  const openAddTaskModal = () => {
+    // Fresh form defaults to Study; Revision is opt-in per task.
+    setNewBlockType('study');
+    setIsAddTaskModalOpen(true);
   };
 
   // Date shifting helpers
@@ -236,7 +260,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
           </div>
 
           <button
-            onClick={() => setIsAddTaskModalOpen(true)}
+            onClick={openAddTaskModal}
             id="btn-add-daily-task"
             className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#6B4EFF] to-[#8B5CF6] hover:from-[#7C5DFA] px-4 py-2.5 text-xs font-bold text-white shadow-[0_0_15px_rgba(107,78,255,0.4)] transition hover:scale-105 active:scale-95 cursor-pointer min-h-[44px]"
           >
@@ -355,7 +379,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
                 <span>Import from Weekly Timetable</span>
               </button>
               <button
-                onClick={() => setIsAddTaskModalOpen(true)}
+                onClick={openAddTaskModal}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-xs font-bold text-white transition cursor-pointer min-h-[44px]"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -377,7 +401,9 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
                 className={`rounded-2xl border transition-all p-3.5 sm:p-4 backdrop-blur-md flex items-center justify-between gap-3 group ${
                   task.isCompleted
                     ? 'border-emerald-500/30 bg-emerald-950/15 opacity-75'
-                    : 'border-white/10 bg-[#161831]/90 hover:border-cyan-400/50'
+                    : task.blockType === 'revision'
+                      ? 'border-teal-400/40 bg-teal-950/15 hover:border-teal-300/60'
+                      : 'border-white/10 bg-[#161831]/90 hover:border-cyan-400/50'
                 }`}
               >
                 {/* Checkbox Target (Min 44x44px touch area) */}
@@ -396,6 +422,12 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
+                      {task.blockType === 'revision' && (
+                        <span className="text-[10px] text-teal-200 font-bold flex items-center gap-1 bg-teal-500/15 px-2 py-0.5 rounded-full border border-teal-400/40">
+                          <RefreshCw className="w-2.5 h-2.5 text-teal-300" />
+                          Revision 🔁
+                        </span>
+                      )}
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-slate-200 border border-white/10">
                         {task.subject}
                       </span>
@@ -566,6 +598,57 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
                   </select>
                 </div>
 
+                {/* Block type: Study vs Revision (Revision = completed topics only) */}
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Task Type</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleBlockTypeChange('study')}
+                      aria-pressed={newBlockType === 'study'}
+                      className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border text-xs font-bold transition cursor-pointer min-h-[44px] ${
+                        newBlockType === 'study'
+                          ? 'bg-cyan-500/20 border-cyan-400/60 text-cyan-200'
+                          : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <GraduationCap className="w-4 h-4" />
+                      <span>Study</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBlockTypeChange('revision')}
+                      disabled={revisionLockedGlobally}
+                      title={
+                        revisionLockedGlobally
+                          ? 'Complete a topic first to unlock revision sessions'
+                          : 'Revision is only for already-completed topics'
+                      }
+                      aria-pressed={newBlockType === 'revision'}
+                      className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border text-xs font-bold transition min-h-[44px] ${
+                        newBlockType === 'revision'
+                          ? 'bg-teal-500/20 border-teal-400/60 text-teal-200'
+                          : revisionLockedGlobally
+                            ? 'bg-white/[0.02] border-white/5 text-slate-600 cursor-not-allowed'
+                            : 'bg-white/5 border-white/10 text-slate-400 hover:text-white cursor-pointer'
+                      }`}
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      <span>Revision 🔁</span>
+                    </button>
+                  </div>
+                  {revisionLockedGlobally ? (
+                    <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                      🔒 Complete a topic first to unlock revision sessions — new topics can only be added as Study.
+                    </p>
+                  ) : newBlockType === 'revision' ? (
+                    <p className="text-[11px] text-teal-300/90 mt-1.5 leading-relaxed">
+                      🔁 Only <strong>completed</strong> topics are listed below
+                      {completedForSubjectCount === 0 ? ` — none completed yet in ${newSubject}` : ''}. Revising earns a bonus, never changes syllabus %.
+                    </p>
+                  ) : null}
+                </div>
+
                 {/* Syllabus topic + per-subtopic 0-100 targets */}
                 <SubtopicTargetPicker
                   syllabusTopics={syllabusTopics}
@@ -574,6 +657,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
                   onTopicChange={handleDailyTopicChange}
                   targets={selectedTargets}
                   onTargetsChange={setSelectedTargets}
+                  completedOnly={newBlockType === 'revision'}
                 />
 
                 {/* Schedule (Start & End Time) */}

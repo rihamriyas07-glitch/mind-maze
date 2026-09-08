@@ -176,10 +176,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="absolute right-0 mt-2 w-60 rounded-2xl border border-white/15 bg-[#161831] p-2 shadow-2xl z-50 animate-fadeIn text-xs">
                     <div className="px-3 py-2.5 border-b border-white/10 mb-1">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Signed in as
+                        {username ? 'Signed in as' : 'Not signed in'}
                       </div>
                       <div className="text-sm font-black text-white truncate">
-                        {username ? `@${username}` : 'Student'}
+                        {username ? `@${username}` : 'Guest'}
                       </div>
                     </div>
 

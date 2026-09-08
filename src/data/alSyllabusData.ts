@@ -97,7 +97,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '1.2 Algebraic and rational inequalities',
       '1.3 Graphical methods for solving modulus inequalities',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
   {
     id: 'cm-02',
@@ -110,7 +110,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '2.2 Quadratic functions, discriminant and nature of roots; symmetric functions of roots',
       '2.3 Partial fractions — linear, repeated and quadratic factors',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
   {
     id: 'cm-03',
@@ -123,7 +123,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '3.2 Arithmetic Progression (AP) and Geometric Progression (GP)',
       '3.3 Summation of finite and infinite series using difference method',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   {
     id: 'cm-04',
@@ -136,7 +136,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '4.2 Expansion of (a+b)^n for positive integral n',
       '4.3 General term and middle term in binomial expansions',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   {
     id: 'cm-05',
@@ -149,7 +149,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '5.2 Determinants of 2x2 and 3x3 matrices; inverse of a square matrix',
       '5.3 Solving linear systems by matrix inversion and Cramer’s Rule',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   {
     id: 'cm-06',
@@ -189,7 +189,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '8.2 Limits involving algebraic, exponential and trigonometric functions',
       '8.3 Continuity of functions',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   {
     id: 'cm-09',
@@ -202,7 +202,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '9.2 Implicit, parametric and logarithmic differentiation',
       '9.3 Tangents, normals and rates of change; turning points, inflexion and curve sketching',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   {
     id: 'cm-10',
@@ -241,7 +241,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '12.1 Vector addition, subtraction, dot product and cross product',
       '12.2 Position vectors and resolution of vectors in 2D / 3D space',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   {
     id: 'cm-13',
@@ -254,7 +254,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '13.2 Relative motion and relative velocity vectors',
       '13.3 Projectiles in a vertical plane',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
   {
     id: 'cm-14',
@@ -267,7 +267,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '14.2 Friction and limiting equilibrium',
       '14.3 Circular motion — horizontal and vertical circular paths',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   {
     id: 'cm-15',
@@ -336,7 +336,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '1.4 Measurements & errors — principle, least count & range; systematic & random errors; fractional & percentage error; metre ruler, vernier calipers, micrometer screw gauge, spherometer, travelling microscope, beam / electronic balance, stopwatch, digital multimeter; lab practicals',
       '1.5 Scalars, vectors & resolution — scalar vs vector, geometrical representation, resultant of collinear / parallel vectors, parallelogram law & triangle method, polygon method for systems, resolution of vectors',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
 
   // UNIT 2: MECHANICS (110 periods • Grade 12)
@@ -356,7 +356,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '2.7 Hydrostatics — hydrostatic & atmospheric pressure, U-tube / Hare’s apparatus for densities, Pascal’s principle & applications, upthrust & Archimedes’ principle, floatation conditions & principle, hydrometer, weighted test-tube for liquid density',
       '2.8 Fluid dynamics — streamline vs turbulent flow, continuity equation for steady flow, Bernoulli’s principle & applications',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
 
   // UNIT 3: OSCILLATIONS AND WAVES (100 periods • Grade 12)
@@ -379,7 +379,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '3.10 Human eye — image formation, visual angle, short sight / long sight / presbyopia & correction',
       '3.11 Optical instruments — simple microscope (normal adjustment, magnifying power), compound microscope (image at infinity), astronomical telescope (image at near point)',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
 
   // UNIT 4: THERMAL PHYSICS (60 periods • Grade 12)
@@ -400,7 +400,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '4.8 Thermodynamics — heat as energy transfer, internal energy, first law & applications (constant pressure / volume, isothermal, adiabatic, cyclic), P-V curves',
       '4.9 Heat transfer — conduction (conductivity, rate equation, lagged / non-lagged rods, Searle’s method), convection, radiation',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
 
   // UNIT 5: GRAVITATIONAL FIELD (20 periods • Grade 13)
@@ -531,7 +531,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '1.4 Quantum numbers — principal (n), azimuthal (l), magnetic (ml), spin (ms); shapes of s and p orbitals',
       '1.5 Electronic configuration — max electrons per sub-level, Hund / Pauli / Aufbau (incl. deviations to Z=54), stable s2/p3/p6/d5/d10; periodic table s/p/d/f blocks (groups 1-18); trends: atomic radius, ionization energy, electron gain, electronegativity (Pauling), shielding / effective nuclear charge, cation / anion formation',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
   // UNIT 02 — BONDING AND STRUCTURE (Grade 12)
   {
@@ -545,7 +545,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '2.2 Molecular shapes — resonance, hybridization sp/sp2/sp3 (2nd period, central atom only), σ and π bonds, VSEPR (up to 6 electron pairs): linear, trigonal planar, tetrahedral, pyramidal, angular, trigonal bipyramid, see-saw, T-shaped, octahedral, square pyramid, square planar; electronegativity vs charge / hybridization / oxidation number; model building',
       '2.3 Intermolecular forces — dipole-dipole, ion-dipole, hydrogen bonding, ion-induced / dipole-induced dipole, London dispersion (qualitative); molecular lattices (I2, H2O)',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
   // UNIT 03 — CHEMICAL CALCULATIONS (Grade 12)
   {
@@ -559,7 +559,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '3.2 Balancing equations — inspection method, redox (oxidation-number & half-ionic methods), simple nuclear reactions',
       '3.3 Stoichiometric calculations — acid-base & redox, precipitation (gravimetry), solution preparation',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 04 — STATE OF MATTER; GASEOUS STATE (Grade 12)
   {
@@ -575,7 +575,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '4.4 Dalton’s partial-pressure law — total vs partial pressure, gaseous mixtures',
       '4.5 Real gases — compressibility factor, deviations (molecular interactions & volume), van der Waals corrections (qualitative), critical temperature',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 05 — ENERGETICS (Grade 12)
   {
@@ -607,7 +607,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '6.5 d-block compounds — acidic / basic / amphoteric Cr & Mn oxides; CrO42− / Cr2O72− / MnO4− as oxidants; Fe2+ titration with acidified KMnO4 (standardized via K2C2O4)',
       '6.6 Complexes — Cr/Mn/Fe/Co/Ni/Cu with H2O & Cl− (colours, IUPAC names); cations (Cr3+, Mn2+, Fe2+, Fe3+, Co2+, Ni2+, Cu2+, Zn2+) with NaOH & NH3(aq); colours of Cu(II)/Ni(II)/Co(II) with HCl & NH3; Mn oxidation states (+2/+4/+6/+7) via redox; Ni2+/Fe2+/Fe3+/Cu2+/Cr3+ identification',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 07 — BASIC CONCEPTS OF ORGANIC CHEMISTRY (Grade 12)
   {
@@ -640,7 +640,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '8.6 Alkyl halides — 1°/2°/3° classification, C−X polarity (F/Cl/Br/I), mp/bp/solubility, SN vs elimination, nucleophiles (OH−, CN−, acetylide, RO−), aryl/vinyl inertness; Grignard preparation (anhydrous need, M−C nature) & reactions with proton donors (water, acids, alcohols, phenols, amines, terminal alkynes)',
       '8.7 Ethene / ethyne preparation & uses; one-step vs two-step (carbocation intermediate) pathways',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
   // UNIT 09 — OXYGEN CONTAINING ORGANIC COMPOUNDS (Grade 12)
   {
@@ -657,7 +657,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '9.5 Carboxylic acids — H-bonding, mp/bp, solubility, dimers; −COOH vs >C=O / −OH reactivity; O−H cleavage acidity (vs alcohols / phenol via conjugate-base stability) & reactions (Na, NaOH, NaHCO3/Na2CO3); C−O cleavage (PCl3/PCl5, esterification with alcohols); LiAlH4 reduction; tests',
       '9.6 Acid derivatives — acid chlorides (aqueous NaOH mechanism; water, NH3, 1° amines, alcohols, phenol); esters (dilute acid, aqueous NaOH, Grignard, LiAlH4); amides (LiAlH4 reduction)',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 10 — NITROGEN CONTAINING ORGANIC COMPOUNDS (Grade 12)
   {
@@ -752,7 +752,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '1.1 Nature, scope & importance — biological diversity, human body, plant life, resources & environment, food production, diseases, legal & ethical issues; challenges faced by mankind',
       '1.2 Organization of life — diversity (size, shape, form, habitat); characteristics: order, metabolism, growth, irritability, adaptation, reproduction, heredity & evolution; hierarchy molecules → organelles → cells → tissues → organs → systems → organism → population → community → ecosystem → biosphere; cell as basic unit',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
   // UNIT 02 — CHEMICAL AND CELLULAR BASIS OF LIFE (80 periods • Grade 12)
   {
@@ -769,7 +769,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '2.5 Photosynthesis — pigments & photosystems, light reactions (NADPH & ATP), Calvin cycle (carboxylation by RUBP carboxylase, PGA reduction, RUBP regeneration), photorespiration, C3 vs C4 pathways & leaf anatomy, limiting factors (CO2, light, temperature); Audus-apparatus rate experiments; C3/C4 leaf sections',
       '2.6 Cellular respiration — aerobic vs anaerobic; glycolysis, pyruvate oxidation & Krebs cycle, electron transport chain; ethanol & lactic fermentation; lipids/proteins as substrates; respiratory quotient; germinating-seed rate & RQ experiments',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
   // UNIT 03 — EVOLUTION AND DIVERSITY OF ORGANISMS (60 periods • Grade 12)
   {
@@ -787,7 +787,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '3.6 Animalia (invertebrates) — organization, nutrition, reproduction; Cnidaria, Platyhelminthes, Nematoda, Annelida, Arthropoda, Mollusca, Echinodermata (habitat, nutrition, respiration, reproduction, excretion, unique features) with observations',
       '3.7 Chordata — phylum features; Chondrichthyes, Osteichthyes, Amphibia, Reptilia, Aves, Mammalia (skeleton, skin, locomotion, respiration, reproduction, habitat, thermoregulation) with observations',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 04 — PLANT FORM AND FUNCTION (80 periods • Grade 12)
   {
@@ -806,7 +806,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '4.7 Reproduction — alternation of generations (gametophyte/sporophyte reduction trends); Pogonatum, Nephrolepis, Selaginella, Cycas, angiosperms; flower structure, pollination & fertilization, cross-pollination significance, endosperm/embryo/fruit/seed development, parthenocarpy/parthenogenesis, dormancy, germination changes',
       '4.8 Responses & hormones — photomorphogenesis, action spectra, blue-light & phytochrome receptors (germination, spacing, flowering, elongation, phototropism); gravitropism & statolith hypothesis; thigmotropism/thigmonasty; auxins, gibberellins, cytokinins, abscisic acid, ethylene, jasmonic acid & agricultural uses; abiotic (drought, flooding, cold, salinity) & biotic (pests, pathogens, herbivores) stress; secondary metabolites (cyanogenic glucosides, terpenoids, alkaloids, phenolics)',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 05 — ANIMAL FORM AND FUNCTION (195 periods • Grade 13)
   {
@@ -929,7 +929,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '1.6 ICT in domains — education, healthcare, agriculture, business & finance, engineering, tourism, media & journalism, law enforcement',
       '1.7 Societal impact — social/economic benefits; social/economical/environmental/ethical/legal/privacy/digital-divide issues; confidentiality, stealing/phishing, piracy, copyright/IP laws, plagiarism, licensed vs unlicensed software',
     ],
-    status: 'completed',
+    status: 'not_started',
   },
   // UNIT 02 — INTRODUCTION TO COMPUTER (22 periods • Grade 12 & 13)
   {
@@ -944,7 +944,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '2.3 Von Neumann architecture — stored-program concept; components (input, output, memory, CU, ALU); fetch-execute cycle; CPU: ALU, CU, registers, data/control bus, multi-core processors',
       '2.4 Memory system — hierarchy need; comparison (size/density, access method, access time, capacity, cost); volatile (registers, cache types, RAM: SRAM/DRAM/SDRAM); non-volatile (PROM/EPROM/EEPROM ROMs; secondary magnetic/optical/flash)',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 03 — DATA REPRESENTATION (18 periods • Grade 12 & 13)
   {
@@ -973,7 +973,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '4.3 Gate circuits — truth tables & expressions for designs up to three inputs; digital-circuit design',
       '4.4 CPU combinational blocks — half adder, full adder; bit storage: feedback loop & flip-flops',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 05 — COMPUTER OPERATING SYSTEM (22 periods • Grade 12 & 13)
   {
@@ -988,7 +988,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '5.3 Process management — process definition, interrupts & handling, states, transitions, PCB, context switching, schedulers',
       '5.4 Resource management — MMU, physical & virtual memory; device management (drivers, spooling)',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 06 — DATA COMMUNICATION AND NETWORKING (50 periods • Grade 12 & 13)
   {
@@ -1050,7 +1050,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '8.6 ER transformation — entity, attribute & relationship transformation',
       '8.7 Normalization — redundancies & insert/update/delete anomalies; functional dependencies (full/partial/transitive); 0NF/1NF/2NF/3NF',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 09 — PROGRAMMING (74 periods • Grade 12 & 13)
   {
@@ -1066,7 +1066,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
       '9.9-9.10 Subprograms & data structures — built-in vs user-defined (structure, parameters, return/default values, scope); strings, lists, tuples, dictionaries',
       '9.11-9.13 Files, databases & algorithms — file operations; DB connect/retrieve/add/modify/delete; sequential search & bubble sort',
     ],
-    status: 'in_progress',
+    status: 'not_started',
   },
   // UNIT 10 — WEB DEVELOPMENT (60 periods • Grade 12 & 13)
   {

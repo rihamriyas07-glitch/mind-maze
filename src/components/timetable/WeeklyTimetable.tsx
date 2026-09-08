@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { DayOfWeek, SubtopicTarget, SyllabusTopic, TimetableEntry, StreamType } from '../../types';
+import { DayOfWeek, SubtopicTarget, SyllabusTopic, TimetableEntry, StreamType, BlockType } from '../../types';
 import {
   Plus,
   Calendar,
@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   Layers,
   Link,
+  RefreshCw,
+  GraduationCap,
 } from 'lucide-react';
 import { SUBJECT_METAS, getSubjectsForStream } from '../../data/alSyllabusData';
 import { INITIAL_TIMETABLE_ENTRIES } from '../../data/alSyllabusData';
@@ -89,6 +91,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
   // Form states
   const [formDay, setFormDay] = useState<DayOfWeek>('Monday');
   const [formSubject, setFormSubject] = useState<string>(availableSubjects[0]?.name || 'Combined Mathematics');
+  const [formBlockType, setFormBlockType] = useState<BlockType>('study');
   const [formTopic, setFormTopic] = useState<string>('');
   const [formTopicId, setFormTopicId] = useState<string>('');
   const [formTargets, setFormTargets] = useState<SubtopicTarget[]>([]);
@@ -105,6 +108,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
     setFormDay(defaultDay || selectedDay);
     const firstSubj = availableSubjects[0]?.name || 'Combined Mathematics';
     setFormSubject(firstSubj);
+    setFormBlockType('study');
     setFormTopic('');
     setFormTopicId('');
     setFormTargets([]);
@@ -122,6 +126,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
     setEditingEntry(entry);
     setFormDay(entry.dayOfWeek);
     setFormSubject(entry.subject);
+    setFormBlockType(entry.blockType === 'revision' ? 'revision' : 'study');
     setFormTopic(entry.topic);
     setFormTopicId(entry.topicId || '');
     setFormTargets(
@@ -157,6 +162,22 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
     setFormTargets([]);
   };
 
+  // Revision is only for already-completed topics.
+  const completedTopicsCount = syllabusTopics.filter((t) => t.status === 'completed').length;
+  const completedForSubjectCount = syllabusTopics.filter(
+    (t) => t.subject === formSubject && t.status === 'completed'
+  ).length;
+  const revisionLockedGlobally = completedTopicsCount === 0;
+
+  const handleBlockTypeChange = (next: BlockType) => {
+    if (next === 'revision' && revisionLockedGlobally) return;
+    setFormBlockType(next);
+    // Switching type invalidates the picked topic — Revision only allows
+    // completed topics, Study allows any.
+    setFormTopicId('');
+    setFormTargets([]);
+  };
+
   const handleSaveModal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTopic.trim()) return;
@@ -174,6 +195,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
         ...editingEntry,
         dayOfWeek: formDay,
         subject: formSubject,
+        blockType: formBlockType,
         topic: formTopic.trim(),
         topicId: formTopicId || undefined,
         subtopic: first?.subtopic,
@@ -190,6 +212,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
       onAddEntry({
         dayOfWeek: formDay,
         subject: formSubject,
+        blockType: formBlockType,
         topic: formTopic.trim(),
         topicId: formTopicId || undefined,
         subtopic: first?.subtopic,
@@ -413,11 +436,12 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {dayEntries.map((entry) => {
                 const colorConfig = COLOR_MAP[entry.color] || COLOR_MAP.indigo;
+                const isRevision = entry.blockType === 'revision';
 
                 return (
                   <div
                     key={entry.id}
-                    className={`rounded-2xl border ${colorConfig.border} bg-gradient-to-br from-[#161831]/90 to-[#0F1023]/90 p-4 sm:p-5 backdrop-blur-md shadow-lg flex flex-col justify-between group hover:border-cyan-400/60 transition-all`}
+                    className={`rounded-2xl border ${isRevision ? 'border-teal-400/50' : colorConfig.border} bg-gradient-to-br ${isRevision ? 'from-teal-950/40 via-[#161831]/90 to-[#0F1023]/90' : 'from-[#161831]/90 to-[#0F1023]/90'} p-4 sm:p-5 backdrop-blur-md shadow-lg flex flex-col justify-between group ${isRevision ? 'hover:border-teal-300/70' : 'hover:border-cyan-400/60'} transition-all`}
                   >
                     <div>
                       {/* Top Meta: Time & Subject Color Badge */}
@@ -459,6 +483,12 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                         <h3 className={`text-base font-bold transition-colors leading-snug ${entry.isCompleted ? 'text-slate-400 line-through' : 'text-white group-hover:text-cyan-300'}`}>
                           {entry.topic}
                         </h3>
+                        {isRevision && (
+                          <span className="text-[10px] text-teal-200 font-bold flex items-center gap-1 bg-teal-500/15 px-2 py-0.5 rounded-full border border-teal-400/40">
+                            <RefreshCw className="w-2.5 h-2.5 text-teal-300" />
+                            Revision 🔁
+                          </span>
+                        )}
                         {entry.fromTaskId && (
                           <span className="text-[10px] text-purple-300 font-semibold flex items-center gap-1 bg-purple-500/15 px-2 py-0.5 rounded-full border border-purple-400/30">
                             <Link className="w-2.5 h-2.5 text-cyan-300" />
@@ -590,17 +620,21 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                     <div className="space-y-2 flex-1">
                       {dayBlocks.map((block) => {
                         const colorConfig = COLOR_MAP[block.color] || COLOR_MAP.indigo;
+                        const isRev = block.blockType === 'revision';
                         return (
                           <div
                             key={block.id}
                             onClick={() => openEditModal(block)}
-                            className={`p-2.5 rounded-xl border ${colorConfig.border} ${colorConfig.bg} text-xs cursor-pointer hover:scale-[1.02] transition shadow-sm`}
+                            className={`p-2.5 rounded-xl border ${isRev ? 'border-teal-400/50 bg-teal-500/10' : `${colorConfig.border} ${colorConfig.bg}`} text-xs cursor-pointer hover:scale-[1.02] transition shadow-sm`}
                           >
                             <div className="flex items-center justify-between text-[10px] text-slate-300 font-bold mb-1">
                               <span>{block.startTime}</span>
-                              {block.reminderEnabled && <Bell className="w-2.5 h-2.5 text-emerald-400" />}
+                              <span className="flex items-center gap-1">
+                                {isRev && <RefreshCw className="w-2.5 h-2.5 text-teal-300" />}
+                                {block.reminderEnabled && <Bell className="w-2.5 h-2.5 text-emerald-400" />}
+                              </span>
                             </div>
-                            <span className="font-bold text-white block line-clamp-1">{block.subject}</span>
+                            <span className="font-bold text-white block line-clamp-1">{block.subject}{isRev ? ' 🔁' : ''}</span>
                             <span className="text-[11px] text-slate-300 line-clamp-2 mt-0.5">{block.topic}</span>
                           </div>
                         );
@@ -698,6 +732,58 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                 </select>
               </div>
 
+              {/* Block type: Study vs Revision (Revision = completed topics only) */}
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1.5">Block Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleBlockTypeChange('study')}
+                    aria-pressed={formBlockType === 'study'}
+                    className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border text-xs font-bold transition cursor-pointer min-h-[44px] ${
+                      formBlockType === 'study'
+                        ? 'bg-cyan-500/20 border-cyan-400/60 text-cyan-200'
+                        : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <GraduationCap className="w-4 h-4" />
+                    <span>Study</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBlockTypeChange('revision')}
+                    disabled={revisionLockedGlobally}
+                    title={
+                      revisionLockedGlobally
+                        ? 'Complete a topic first to unlock revision sessions'
+                        : 'Revision is only for already-completed topics'
+                    }
+                    aria-pressed={formBlockType === 'revision'}
+                    className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border text-xs font-bold transition min-h-[44px] ${
+                      formBlockType === 'revision'
+                        ? 'bg-teal-500/20 border-teal-400/60 text-teal-200'
+                        : revisionLockedGlobally
+                          ? 'bg-white/[0.02] border-white/5 text-slate-600 cursor-not-allowed'
+                          : 'bg-white/5 border-white/10 text-slate-400 hover:text-white cursor-pointer'
+                    }`}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Revision 🔁</span>
+                  </button>
+                </div>
+                {revisionLockedGlobally ? (
+                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                    🔒 Complete a topic first to unlock revision sessions — new topics can only be added as Study.
+                  </p>
+                ) : formBlockType === 'revision' ? (
+                  <p className="text-[11px] text-teal-300/90 mt-1.5 leading-relaxed">
+                    🔁 Revision blocks only list topics already marked <strong>completed</strong> in the Topic
+                    Tracker{completedForSubjectCount === 0 ? ` — none completed yet in ${formSubject}, pick another subject or finish one first` : ''}.
+                    Completing one earns a bonus without changing syllabus %.
+                  </p>
+                ) : null}
+              </div>
+
               {/* Topic & Description */}
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">
@@ -721,6 +807,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                 onTopicChange={handleTimetableTopicChange}
                 targets={formTargets}
                 onTargetsChange={setFormTargets}
+                completedOnly={formBlockType === 'revision'}
               />
 
               {/* Times: Start and End */}

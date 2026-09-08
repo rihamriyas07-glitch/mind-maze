@@ -1,5 +1,5 @@
 import { DailyTask, SyllabusTopic, TimetableEntry, UserSettings, StreamType } from '../types';
-import { INITIAL_SYLLABUS_TOPICS, INITIAL_TIMETABLE_ENTRIES } from '../data/alSyllabusData';
+import { INITIAL_SYLLABUS_TOPICS } from '../data/alSyllabusData';
 
 const TIMETABLE_STORAGE_KEY = 'mindmaze_timetable_v2';
 const DAILY_TASKS_STORAGE_KEY = 'mindmaze_daily_tasks_v2';
@@ -9,10 +9,12 @@ const SETTINGS_STORAGE_KEY = 'mindmaze_user_settings_v2';
 export const DEFAULT_SETTINGS: UserSettings = {
   stream: 'Physical Science',
   physicalScienceElective: 'Chemistry',
-  studentName: 'A/L Scholar',
+  studentName: '',
   targetExamYear: '2027',
   targetExamDate: '',
-  targetZScore: '2.450',
+  // No fake goal: a fresh account shows no Z-score target until the student
+  // sets one at sign-up or in Settings (the goals strip hides when unset).
+  targetZScore: '',
   motivationNote: '',
   reminderSoundEnabled: true,
   notificationsGranted: false,
@@ -21,18 +23,20 @@ export const DEFAULT_SETTINGS: UserSettings = {
 };
 
 // ================= TIMETABLE STORAGE =================
+// Fresh accounts start with ZERO blocks: an empty timetable stays empty.
+// (The recommended schedule is only applied on explicit Reset in the
+// Timetable tab via getInitialTimetableForStream — never auto-seeded.)
 export function getStoredTimetable(): TimetableEntry[] {
   try {
     const raw = localStorage.getItem(TIMETABLE_STORAGE_KEY);
     if (!raw) {
-      saveStoredTimetable(INITIAL_TIMETABLE_ENTRIES);
-      return INITIAL_TIMETABLE_ENTRIES;
+      return [];
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_TIMETABLE_ENTRIES;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('Failed to parse timetable from localStorage, fallback to initial', e);
-    return INITIAL_TIMETABLE_ENTRIES;
+    console.warn('Failed to parse timetable from localStorage, fallback to empty', e);
+    return [];
   }
 }
 
