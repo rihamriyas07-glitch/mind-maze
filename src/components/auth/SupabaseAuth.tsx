@@ -185,8 +185,14 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
         return;
       }
 
-      // 2. Create the auth user.
-      const { data, error } = await client.auth.signUp({ email: email.trim(), password });
+      // 2. Create the auth user. emailRedirectTo sends the verification
+      //    link back to our /confirmed screen (must be allow-listed under
+      //    Authentication → URL Configuration → Redirect URLs).
+      const { data, error } = await client.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/confirmed` },
+      });
       if (error) throw error;
       const user = data.user;
       if (!user) {
