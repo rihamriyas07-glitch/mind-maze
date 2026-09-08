@@ -87,6 +87,7 @@ import {
   CloudError,
 } from './lib/cloudStore';
 import { SupabaseAuth, AuthView } from './components/auth/SupabaseAuth';
+import { EmailConfirmed } from './components/auth/EmailConfirmed';
 import { AdminPanel } from './components/admin/AdminPanel';
 import { SettingsScreen } from './components/settings/SettingsScreen';
 import { CelebrationModal, Celebration } from './components/common/CelebrationModal';
@@ -1537,6 +1538,11 @@ export default function App() {
     if (routePath === '/' && landingReady) {
       return renderLandingPage();
     }
+    // Email-confirmation link target: renders immediately with its own
+    // verifying state instead of waiting for the session check.
+    if (routePath === '/confirmed') {
+      return <EmailConfirmed />;
+    }
     return splash('Loading Mind Maze…');
   }
 
@@ -1566,9 +1572,20 @@ export default function App() {
     if (routePath === '/') {
       return renderLandingPage();
     }
+    // Email-confirmation link target (public): shows the verified success
+    // state instead of the sign-up form when the link opens a new tab.
+    if (routePath === '/confirmed') {
+      return <EmailConfirmed />;
+    }
     // "/login", "/signup", and protected routes (e.g. "/dashboard") all show
     // the login screen until the visitor signs in.
     return <SupabaseAuth view={authView} onViewChange={handleAuthViewChange} onAuthReady={handleAuthReady} initialStream={signupStream} />;
+  }
+
+  // Verified link opened while already signed in: celebrate first, then let
+  // the student continue into the app via the screen's own button.
+  if (routePath === '/confirmed') {
+    return <EmailConfirmed />;
   }
 
   if (isSupabaseConfigured && authUserId && !username && !cloudLoading) {

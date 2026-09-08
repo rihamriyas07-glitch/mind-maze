@@ -766,8 +766,9 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
           <h2 className="text-lg font-black text-white">Check your inbox!</h2>
           <p className="text-xs text-slate-300 leading-relaxed">
             We sent a verification link to <strong className="text-white">{email || 'your email'}</strong>.
-            Click it, then come back here and sign in — your username{' '}
-            <strong className="text-cyan-300">@{username}</strong> will be reserved for you.
+            Click it — it opens a confirmation page (possibly in a new tab) where
+            you continue straight into your account. Your username{' '}
+            <strong className="text-cyan-300">@{username}</strong> is reserved for you.
           </p>
           <button
             type="button"
