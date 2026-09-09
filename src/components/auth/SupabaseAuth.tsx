@@ -23,7 +23,18 @@ import {
   KeyRound,
   CheckCircle2,
   ArrowLeft,
+  Send,
 } from 'lucide-react';
+import {
+  AuthAction,
+  cooldownMessage,
+  getCooldownRemaining,
+  isRateLimitError,
+  parseWaitSeconds,
+  rateLimitMessage,
+  recordAttempt,
+  recordRateLimit,
+} from '../../lib/authRateLimit';
 
 export type AuthView = 'signin' | 'signup' | 'forgot' | 'check-email' | 'username' | 'update-password';
 
@@ -55,8 +66,8 @@ function friendlyAuthError(message: string): string {
   if (lower.includes('email not confirmed')) {
     return 'Please verify your email first — check your inbox for the confirmation link.';
   }
-  if (lower.includes('rate limit') || lower.includes('too many')) {
-    return 'Too many attempts. Please wait a minute and try again.';
+  if (isRateLimitError(message)) {
+    return rateLimitMessage(message);
   }
   if (/network|fetch|failed/i.test(message)) {
     return 'Network error. Check your connection and try again.';
@@ -76,6 +87,20 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
+  // Bumped once per second while any auth cooldown is active so the
+  // "try again in Ns" labels count down live.
+  const [cooldownTick, setCooldownTick] = useState(0);
+
+  // Live countdown while a cooldown lock is active. The interval only runs
+  // when at least one action is locked, so idle pages pay nothing.
+  useEffect(() => {
+    const anyLocked = (
+      ['signin', 'signup', 'forgot', 'resend'] as AuthAction[]
+    ).some((a) => getCooldownRemaining(a) > 0);
+    if (!anyLocked) return;
+    const timer = setTimeout(() => setCooldownTick((t) => t + 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldownTick, busy, errorMsg, infoMsg, view]);
   // Stream is REQUIRED at sign-up: nothing is pre-selected unless the
   // student tapped a stream on the landing page (initialStream prop).
   // Physical Science unlocks the Chemistry / ICT elective choice below.
@@ -112,11 +137,30 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
   }
   const client = supabase;
 
-  const fail = (err: unknown) => {
-    if (err instanceof CloudError) setErrorMsg(err.userMessage);
-    else if (err instanceof Error) setErrorMsg(friendlyAuthError(err.message));
-    else setErrorMsg('Something went wrong. Please try again.');
+  const fail = (err: unknown, action?: AuthAction) => {
+    if (err instanceof CloudError) {
+      setErrorMsg(err.userMessage);
+    } else if (err instanceof Error) {
+      if (action && isRateLimitError(err.message)) {
+        // Server-side 429: lock this action so instant retries can't extend
+        // the sliding-window ban, and show a live countdown instead.
+        recordRateLimit(action, parseWaitSeconds(err.message) ?? 60);
+        setCooldownTick((t) => t + 1); // restart the countdown ticker
+      }
+      setErrorMsg(friendlyAuthError(err.message));
+    } else {
+      setErrorMsg('Something went wrong. Please try again.');
+    }
     setBusy(false);
+  };
+
+  /** Client-side guard: block attempts still inside the cooldown window. */
+  const blockedByCooldown = (action: AuthAction): boolean => {
+    if (getCooldownRemaining(action) > 0) {
+      setErrorMsg(cooldownMessage(action));
+      return true;
+    }
+    return false;
   };
 
   const persistStreamChoice = () => {
@@ -152,6 +196,7 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
     e.preventDefault();
     setErrorMsg(null);
     setInfoMsg(null);
+    if (blockedByCooldown('signup')) return;
 
     const nameError = validateUsernameFormat(username);
     if (nameError) {
@@ -176,6 +221,7 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
     }
 
     setBusy(true);
+    recordAttempt('signup');
     try {
       // 1. Username must be unique — check before creating the auth user.
       const available = await checkUsernameAvailable(username);
@@ -202,8 +248,11 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
       }
 
       // 3. Store the chosen username linked to the new user id.
-      //    With email confirmation ON there is no session yet — the profile
-      //    is created on first login instead (see username setup view).
+      //    With "Confirm email" OFF, sign-up returns a session immediately,
+      //    so the profile is created right here. (If confirmation is ever
+      //    re-enabled there is no session yet — the profile is created on
+      //    first login instead; see the check-email fallback below and the
+      //    username setup view.)
       persistStreamChoice();
       persistExamDateChoice();
       persistGoalsChoice();
@@ -233,12 +282,20 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
           // Rare race: someone grabbed the name in between. Sign out so a
           // clean retry is possible, and explain clearly.
           await client.auth.signOut();
-          fail(profileErr);
+          fail(profileErr, 'signup');
           return;
         }
         setBusy(false);
         onAuthReady?.(username.trim());
+      } else if (data.user && (data.user.identities?.length ?? 1) === 0) {
+        // "Confirm email" OFF + this email is already registered: Supabase
+        // returns an empty-identities user with no session instead of an
+        // error (anti-enumeration). Send the student to sign in.
+        setBusy(false);
+        setErrorMsg('An account with this email already exists. Try signing in instead.');
+        onViewChange('signin');
       } else {
+      // Fallback for when "Confirm email" is re-enabled: no session yet.
       // Keep the pending username + stream + elective + exam date + goals +
       // completed topics so first login can claim them automatically on
       // this device (see App loadCloudForUser).
@@ -260,7 +317,7 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
         onViewChange('check-email');
       }
     } catch (err) {
-      fail(err);
+      fail(err, 'signup');
     }
   };
 
@@ -269,18 +326,20 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
     e.preventDefault();
     setErrorMsg(null);
     setInfoMsg(null);
+    if (blockedByCooldown('signin')) return;
     if (!email.trim() || !password) {
       setErrorMsg('Please enter both your email and password.');
       return;
     }
     setBusy(true);
+    recordAttempt('signin');
     try {
       const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw error;
       // Session listener in App takes over from here (loads profile + data).
       setBusy(false);
     } catch (err) {
-      fail(err);
+      fail(err, 'signin');
     }
   };
 
@@ -289,11 +348,13 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
     e.preventDefault();
     setErrorMsg(null);
     setInfoMsg(null);
+    if (blockedByCooldown('forgot')) return;
     if (!email.trim() || !email.includes('@')) {
       setErrorMsg('Enter your account email above first.');
       return;
     }
     setBusy(true);
+    recordAttempt('forgot');
     try {
       const { error } = await client.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: window.location.origin,
@@ -302,7 +363,35 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
       setBusy(false);
       setInfoMsg(`If an account exists for ${email.trim()}, a password reset link is on its way. Check your inbox (and spam folder).`);
     } catch (err) {
-      fail(err);
+      fail(err, 'forgot');
+    }
+  };
+
+  // ---------- Resend verification email (check-email view) ----------
+  // Previously the only way to get another email was to re-submit the whole
+  // sign-up form — every retry burned the server email quota and deepened
+  // the rate-limit ban. A dedicated resend with a 60s cooldown avoids that.
+  const handleResend = async () => {
+    setErrorMsg(null);
+    setInfoMsg(null);
+    if (blockedByCooldown('resend')) return;
+    if (!email.trim() || !email.includes('@')) {
+      setErrorMsg('Enter your account email on the sign-up form first.');
+      return;
+    }
+    setBusy(true);
+    recordAttempt('resend');
+    try {
+      const { error } = await client.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+        options: { emailRedirectTo: `${window.location.origin}/confirmed` },
+      });
+      if (error) throw error;
+      setBusy(false);
+      setInfoMsg(`Verification email re-sent to ${email.trim()}. Check your inbox and spam folder.`);
+    } catch (err) {
+      fail(err, 'resend');
     }
   };
 
@@ -388,7 +477,7 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
       setInfoMsg('Password updated! You are signed in — loading your study data…');
       setTimeout(() => onViewChange('signin'), 1500);
     } catch (err) {
-      fail(err);
+      fail(err, 'signin');
     }
   };
 
@@ -480,16 +569,23 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
     </div>
   );
 
-  const submitButton = (label: string) => (
-    <button
-      type="submit"
-      disabled={busy}
-      className="w-full py-3 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] disabled:opacity-60 text-white text-xs font-bold transition-all shadow-[0_0_15px_rgba(107,78,255,0.4)] flex items-center justify-center gap-2 cursor-pointer"
+  const submitButton = (label: string, action?: AuthAction) => {
+    // Re-read on every render; cooldownTick forces a re-render each second
+    // while locked so the countdown stays live.
+    void cooldownTick;
+    const remaining = action ? getCooldownRemaining(action) : 0;
+    const locked = remaining > 0;
+    return (
+      <button
+        type="submit"
+        disabled={busy || locked}
+      className="w-full py-3 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] disabled:opacity-60 text-white text-xs font-bold transition-all shadow-[0_0_15px_rgba(107,78,255,0.4)] flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
     >
       {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-      <span>{busy ? 'Please wait…' : label}</span>
+      <span>{busy ? 'Please wait…' : locked ? `Try again in ${remaining}s` : label}</span>
     </button>
-  );
+    );
+  };
 
   // Shared stream + elective picker used by the sign-up and first-login
   // username-setup forms (plain JSX, no hooks inside). Choosing Physical
@@ -651,7 +747,7 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
             </div>
           </div>
           {passwordField('Password', true)}
-          {submitButton('Sign In to Dashboard')}
+          {submitButton('Sign In to Dashboard', 'signin')}
           <p className="text-[11px] text-slate-500 text-center">
             Your data syncs across devices and survives cache clearing.
           </p>
@@ -725,7 +821,7 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
           {streamPicker}
           {headStartStep}
           {goalsStep}
-          {submitButton('Create My Account')}
+          {submitButton('Create My Account', 'signup')}
         </form>
       )}
 
@@ -750,7 +846,7 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
               />
             </div>
           </div>
-          {submitButton('Send Reset Link')}
+          {submitButton('Send Reset Link', 'forgot')}
           <button
             type="button"
             onClick={() => {
@@ -776,6 +872,34 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
             you continue straight into your account. Your username{' '}
             <strong className="text-cyan-300">@{username}</strong> is reserved for you.
           </p>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            No email? Check spam first — then resend below. Please don&apos;t
+            create the account again; each retry counts toward the email limit.
+          </p>
+          {(() => {
+            const resendLeft = getCooldownRemaining('resend');
+            return (
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={busy || resendLeft > 0}
+                className="w-full py-2.5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 disabled:opacity-60 text-cyan-300 text-xs font-bold transition-all cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {busy ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {busy
+                    ? 'Sending…'
+                    : resendLeft > 0
+                      ? `Resend available in ${resendLeft}s`
+                      : 'Resend verification email'}
+                </span>
+              </button>
+            );
+          })()}
           <button
             type="button"
             onClick={() => {
@@ -843,7 +967,7 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
               />
             </div>
           </div>
-          {submitButton('Update Password & Sign In')}
+          {submitButton('Update Password & Sign In', 'signin')}
         </form>
       )}
     </div>
