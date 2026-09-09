@@ -108,8 +108,15 @@ const SCREEN_PATHS: Record<ScreenId, string> = {
   settings: '/settings',
 };
 
+function normalizePath(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith('/')) {
+    return pathname.slice(0, -1);
+  }
+  return pathname;
+}
+
 function screenForPath(pathname: string): ScreenId | null {
-  switch (pathname) {
+  switch (normalizePath(pathname)) {
     case '/dashboard':
       return 'dashboard';
     case '/timetable':
@@ -130,8 +137,9 @@ function screenForPath(pathname: string): ScreenId | null {
 }
 
 function authViewForPath(pathname: string): AuthView | null {
-  if (pathname === '/login') return 'signin';
-  if (pathname === '/signup') return 'signup';
+  const p = normalizePath(pathname);
+  if (p === '/login') return 'signin';
+  if (p === '/signup') return 'signup';
   return null;
 }
 
@@ -143,17 +151,47 @@ function navigateTo(path: string) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+/**
+ * True when the current URL carries Supabase auth-callback params.
+ * This happens when the email link was rewritten by Supabase to the Site URL
+ * ("/") because "/confirmed" isn't allow-listed, or when an old template
+ * points at the root. Detecting it lets us rescue the flow and show the
+ * EmailConfirmed screen instead of the landing page.
+ */
+function getAuthCallbackKind(): 'recovery' | 'signup' | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const url = new URL(window.location.href);
+    const typeParam = (url.searchParams.get('type') || '').toLowerCase();
+    if (typeParam === 'recovery') return 'recovery';
+    if (url.searchParams.has('code')) return 'signup';
+    if (url.searchParams.has('token_hash')) return typeParam === 'recovery' ? 'recovery' : 'signup';
+    const hash = window.location.hash || '';
+    if (hash.includes('access_token') || hash.includes('type=recovery')) {
+      return hash.includes('type=recovery') || typeParam === 'recovery' ? 'recovery' : 'signup';
+    }
+    if (hash.includes('error')) return 'signup';
+  } catch {}
+  return null;
+}
+
 export default function App() {
   // Hooks must stay unconditional and in a stable order at the top of the
   // component (Rules of Hooks). useOnlineStatus is first so its dispatcher
   // slot never shifts when later state/effects change.
   const isOnline = useOnlineStatus();
 
-  const [routePath, setRoutePath] = useState(() =>
-    typeof window !== 'undefined' ? window.location.pathname : '/'
-  );
+  const [routePath, setRoutePath] = useState(() => {
+    if (typeof window === 'undefined') return '/';
+    const p = normalizePath(window.location.pathname);
+    // First paint rescue: Supabase links that fell back to "/" (missing
+    // redirect allow-list) must render EmailConfirmed immediately, not the
+    // landing page.
+    if (p === '/' && getAuthCallbackKind()) return '/confirmed';
+    return p;
+  });
   const [currentScreen, setCurrentScreen] = useState<ScreenId>(() =>
-    (typeof window !== 'undefined' ? screenForPath(window.location.pathname) : null) ?? 'dashboard'
+    (typeof window !== 'undefined' ? screenForPath(normalizePath(window.location.pathname)) : null) ?? 'dashboard'
   );
   const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>(() => getStoredTimetable());
   const [dailyTasks, setDailyTasks] = useState<DailyTask[]>(() => getStoredDailyTasks());
@@ -169,7 +207,7 @@ export default function App() {
   // Defaults to 'student'; only set to 'admin' from the Supabase row.
   const [userRole, setUserRole] = useState<UserRole>('student');
   const [authView, setAuthView] = useState<AuthView>(() =>
-    (typeof window !== 'undefined' ? authViewForPath(window.location.pathname) : null) ?? 'signin'
+    (typeof window !== 'undefined' ? authViewForPath(normalizePath(window.location.pathname)) : null) ?? 'signin'
   );
   const [authChecked, setAuthChecked] = useState(false);
   const [cloudLoading, setCloudLoading] = useState(false);
@@ -252,10 +290,32 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [syncToastMessage]);
 
+  // Rescue auth-callback links that landed on the wrong path.
+  // If Supabase URL config falls back to the Site URL ("/"), the signup
+  // ?code= / ?token_hash= / #access_token params arrive on "/" and would
+  // otherwise render the landing page ("opens the app again"). Move them to
+  // "/confirmed" preserving query+hash so EmailConfirmed can exchange them.
+  // Recovery links are rescued too — the PASSWORD_RECOVERY listener still
+  // takes precedence and shows the new-password form.
+  useEffect(() => {
+    try {
+      const kind = getAuthCallbackKind();
+      if (!kind) return;
+      const path = normalizePath(window.location.pathname);
+      if (path === '/confirmed') return;
+      if (path !== '/') return;
+      const target = `/confirmed${window.location.search}${window.location.hash}`;
+      window.history.replaceState({}, '', target);
+      setRoutePath('/confirmed');
+      window.scrollTo({ top: 0 });
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Keep URL route, auth view, and in-app screen in sync (back/forward buttons).
   useEffect(() => {
     const syncRoute = () => {
-      const p = window.location.pathname;
+      const p = normalizePath(window.location.pathname);
       setRoutePath(p);
       const av = authViewForPath(p);
       if (av) setAuthView(av);
