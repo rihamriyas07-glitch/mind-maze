@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, ShieldCheck, CheckCircle2, X, Sparkles, Volume2 } from 'lucide-react';
-import { requestBrowserNotificationPermission, sendStudyNotification } from '../../lib/notificationService';
+import { requestBrowserNotificationPermission, sendStudyNotification, subscribeForPush } from '../../lib/notificationService';
 
 interface NotificationPermissionModalProps {
   isOpen: boolean;
@@ -20,6 +20,9 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
     const perm = await requestBrowserNotificationPermission();
     onPermissionUpdated(perm);
     if (perm === 'granted') {
+      // Register for closed-app Web Push (free, VAPID). No-op if the
+      // public key isn't configured yet — local reminders still work.
+      void subscribeForPush().catch(() => undefined);
       sendStudyNotification(
         '🔔 Mind Maze Notifications Enabled!',
         'You will now receive timely reminders before your GCE A/L timetable study sessions.'

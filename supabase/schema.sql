@@ -22,6 +22,7 @@ create table if not exists public.profiles (
   al_exam_date text,
   target_z_score text,
   motivation_note text,
+  revision_count int not null default 0,
   created_at timestamptz not null default now(),
   constraint username_length check (char_length(username) between 3 and 30),
   constraint username_format check (username ~ '^[A-Za-z0-9_]+$')
@@ -82,6 +83,50 @@ begin
       add constraint profiles_exam_date_format check (
         al_exam_date is null or al_exam_date ~ '^\d{4}-\d{2}-\d{2}$'
       );
+  end if;
+end $$;
+
+-- Upgrade for databases created before the revision-support columns
+-- existed (create table if not exists won't add them to an existing table).
+alter table public.timetable_entries
+  add column if not exists block_type text not null default 'study';
+
+alter table public.daily_tasks
+  add column if not exists block_type text not null default 'study';
+
+alter table public.profiles
+  add column if not exists revision_count int not null default 0;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'timetable_entries_block_type_check'
+  ) then
+    alter table public.timetable_entries
+      add constraint timetable_entries_block_type_check
+      check (block_type in ('study', 'revision'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'daily_tasks_block_type_check'
+  ) then
+    alter table public.daily_tasks
+      add constraint daily_tasks_block_type_check
+      check (block_type in ('study', 'revision'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'profiles_revision_count_check'
+  ) then
+    alter table public.profiles
+      add constraint profiles_revision_count_check
+      check (revision_count >= 0);
   end if;
 end $$;
 
@@ -212,6 +257,7 @@ create table if not exists public.timetable_entries (
   topic_id text,
   subtopic text,
   target_progress int,
+  block_type text not null default 'study',
   is_completed boolean not null default false,
   start_time text not null default '16:00',
   end_time text not null default '18:00',
@@ -270,6 +316,7 @@ create table if not exists public.daily_tasks (
   topic_title text,
   subtopic text,
   target_progress int,
+  block_type text not null default 'study',
   is_completed boolean not null default false,
   completed_at text,
   time_slot text,

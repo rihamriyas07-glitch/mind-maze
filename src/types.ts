@@ -112,6 +112,7 @@ export interface UserSettings {
   reminderSoundEnabled: boolean;
   notificationsGranted: boolean;
   hasSeenNotificationPrompt: boolean;
+  dailyHoursGoal: number;
   weeklyHoursGoal: number;
 }
 

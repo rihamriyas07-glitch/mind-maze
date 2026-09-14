@@ -71,6 +71,153 @@ export async function requestBrowserNotificationPermission(): Promise<Notificati
   }
 }
 
+// ---------------------------------------------------------------------------
+// Real Web Push subscription (free: browser vendor push service + VAPID).
+// Call AFTER permission is granted. Reads the session internally so callers
+// (e.g. NotificationPermissionModal) don't need prop drilling.
+// Requires VITE_VAPID_PUBLIC_KEY in .env.
+// ---------------------------------------------------------------------------
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = window.atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) {
+    output[i] = raw.charCodeAt(i);
+  }
+  return output;
+}
+
+export function isPushSupported(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    isNotificationSupported()
+  );
+}
+
+/**
+ * Subscribe this browser/device for closed-app push and save it to Supabase.
+ * Safe to call repeatedly: reuses the existing subscription and upserts.
+ * Returns true when a subscription is stored.
+ */
+export async function subscribeForPush(): Promise<boolean> {
+  try {
+    if (!isPushSupported()) return false;
+    if (Notification.permission !== 'granted') return false;
+
+    const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+    if (!publicKey) {
+      console.warn('[Push] VITE_VAPID_PUBLIC_KEY is not set. Skipping push subscription.');
+      return false;
+    }
+
+    const { supabase } = await import('./supabaseClient');
+    if (!supabase) return false;
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    if (!userId) return false;
+
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    const sub =
+      existing ??
+      (await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      }));
+
+    const json = sub.toJSON();
+    const p256dh = json.keys?.p256dh;
+    const authKey = json.keys?.auth;
+    if (!p256dh || !authKey) return false;
+
+    const { error } = await supabase.from('push_subscriptions').upsert(
+      {
+        user_id: userId,
+        endpoint: sub.endpoint,
+        p256dh,
+        auth: authKey,
+        user_agent: navigator.userAgent,
+      },
+      { onConflict: 'user_id,endpoint' }
+    );
+    if (error) {
+      console.warn('[Push] Failed to save subscription:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Push] subscribeForPush failed:', err);
+    return false;
+  }
+}
+
+/**
+ * Best-effort cleanup for revoked/denied permission.
+ * If the browser permission is no longer granted but a push subscription for
+ * this device still exists (e.g. the student revoked it in browser settings),
+ * unsubscribe it and delete its row so the server stops sending dead pushes.
+ * No-op when permission is still granted or no subscription exists.
+ */
+export async function cleanupStalePushSubscription(): Promise<void> {
+  try {
+    if (!isPushSupported()) return;
+    if (Notification.permission === 'granted') return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    const endpoint = sub.endpoint;
+    await sub.unsubscribe().catch(() => undefined);
+    const { supabase } = await import('./supabaseClient');
+    if (!supabase) return;
+    await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  } catch (err) {
+    console.warn('[Push] cleanupStalePushSubscription failed:', err);
+  }
+}
+
+/**
+ * Remove this device's push subscription (call on logout / settings opt-out).
+ */
+export async function unsubscribeFromPush(): Promise<void> {
+  try {
+    if (!isPushSupported()) return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    const endpoint = sub?.endpoint;
+    if (sub) await sub.unsubscribe().catch(() => undefined);
+    if (!endpoint) return;
+    const { supabase } = await import('./supabaseClient');
+    if (!supabase) return;
+    await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  } catch (err) {
+    console.warn('[Push] unsubscribeFromPush failed:', err);
+  }
+}
+
+/**
+ * Listen for subscription-rotation notices from the service worker
+ * (pushsubscriptionchange). Re-subscribes so push_subscriptions keeps the
+ * fresh endpoint. Call once at app startup.
+ */
+export function listenForPushSubscriptionChange(): void {
+  try {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'PUSH_SUBSCRIPTION_CHANGE') {
+        if (Notification.permission === 'granted') {
+          void subscribeForPush().catch(() => undefined);
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('[Push] listenForPushSubscriptionChange failed:', err);
+  }
+}
+
 /**
  * Register Service Worker if available.
  * Production only: registering during local development would let the worker

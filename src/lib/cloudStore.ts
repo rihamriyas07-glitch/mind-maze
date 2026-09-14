@@ -22,12 +22,40 @@ function requireClient() {
   return supabase;
 }
 
+/** Extract a human-readable message from any Supabase/PostgREST/network error shape.
+ *  PostgREST failures are plain objects ({ message, details, hint, code }),
+ *  NOT Error instances — reading only err.message produced "Unknown error". */
+function describeError(err: unknown): { message: string; code?: string } {
+  if (err instanceof Error) {
+    return { message: err.message || 'Unknown error' };
+  }
+  if (err && typeof err === 'object') {
+    const r = err as Record<string, unknown>;
+    const parts: string[] = [];
+    if (typeof r.message === 'string' && r.message.trim()) parts.push(r.message.trim());
+    if (typeof r.details === 'string' && r.details.trim()) parts.push(r.details.trim());
+    if (typeof r.hint === 'string' && r.hint.trim()) parts.push(r.hint.trim());
+    const code = typeof r.code === 'string' && r.code.trim() ? r.code.trim() : undefined;
+    if (parts.length > 0) return { message: parts.join(' '), code };
+    try {
+      const json = JSON.stringify(r);
+      if (json && json !== '{}') return { message: json, code };
+    } catch {
+      // fall through to Unknown error
+    }
+  } else if (typeof err === 'string' && err.trim()) {
+    return { message: err.trim() };
+  }
+  return { message: 'Unknown error' };
+}
+
 function friendlyError(prefix: string, err: unknown): CloudError {
-  const msg = err instanceof Error ? err.message : 'Unknown error';
+  const { message: msg, code } = describeError(err);
   if (/network|fetch|failed|offline/i.test(msg)) {
     return new CloudError(`${prefix} You appear to be offline — your work is saved on this device and will sync later.`, err);
   }
-  return new CloudError(`${prefix} ${msg}`, err);
+  const suffix = code ? `${msg} (code ${code})` : msg;
+  return new CloudError(`${prefix} ${suffix}`, err);
 }
 
 // ================= PROFILES =================
@@ -66,12 +94,15 @@ export function toExamDate(v: unknown): string | null {
   return Number.isNaN(d.getTime()) ? null : t;
 }
 
-/** True when a Supabase error means "column does not exist" (pre-migration DB). */
+/** True when a Supabase error means "column does not exist" (pre-migration DB).
+ *  Covers both raw Postgres errors (code 42703) and PostgREST schema-cache
+ *  errors (code PGRST204: "Could not find the 'x' column ... in the schema
+ *  cache"), which is what the API actually returns for a missing column. */
 function isMissingColumnError(err: unknown): boolean {
   const code = (err as { code?: string } | null)?.code;
-  if (code === '42703') return true;
+  if (code === '42703' || code === 'PGRST204') return true;
   const msg = err instanceof Error ? err.message : String((err as { message?: unknown })?.message ?? err ?? '');
-  return /column .* does not exist/i.test(msg);
+  return /column .* does not exist/i.test(msg) || /could not find .* column .* schema cache/i.test(msg);
 }
 
 export async function fetchUsername(userId: string): Promise<string | null> {
@@ -487,8 +518,11 @@ async function upsertAndPrune(
     const { error } = await client.from(table).upsert(rows, { onConflict: 'user_id,id' });
     if (error) throw error;
   }
+  // Quote text IDs for the PostgREST `in=(...)` list so hyphens and other
+  // characters in client-generated IDs can never break the prune query.
+  const idList = ids.map((id) => `"${String(id).replace(/"/g, '""')}"`).join(',');
   if (ids.length > 0) {
-    const { error } = await client.from(table).delete().eq('user_id', userId).not('id', 'in', `(${ids.join(',')})`);
+    const { error } = await client.from(table).delete().eq('user_id', userId).not('id', 'in', `(${idList})`);
     if (error) throw error;
   } else {
     const { error } = await client.from(table).delete().eq('user_id', userId);

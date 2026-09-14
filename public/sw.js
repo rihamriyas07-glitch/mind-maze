@@ -1,5 +1,5 @@
 // Mind Maze Study Planner Service Worker for GCE A/L
-const CACHE_NAME = 'mind-maze-pwa-v4';
+const CACHE_NAME = 'mind-maze-pwa-v5';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -170,15 +170,58 @@ self.addEventListener('fetch', (event) => {
 });
 
 // Push & Notification handling
+// Real Web Push: fired by the browser's push service even when all tabs
+// are closed. Payload is JSON: { title, body, tag, url }.
+self.addEventListener('push', (event) => {
+  let data = { title: 'Mind Maze', body: 'Time to study!', tag: 'mind-maze-push', url: '/' };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
+    // Non-JSON push: fall back to defaults above.
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: data.tag,
+      renotify: true,
+      vibrate: [200, 100, 200],
+      data: { url: data.url || '/' },
+    })
+  );
+});
+
+// Subscription expired / rotated by the browser vendor (e.g. key rotation).
+// The worker cannot re-subscribe on its own (no VAPID key here by design),
+// so tell any open Mind Maze tab to re-run subscribeForPush(), which upserts
+// the fresh endpoint into push_subscriptions. Stale endpoints are also pruned
+// server-side on 404/410 during send (see supabase/functions/send-push).
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        try {
+          client.postMessage({ type: 'PUSH_SUBSCRIPTION_CHANGE' });
+        } catch {
+          // Best-effort; the next sign-in re-subscribes anyway (see App.tsx).
+        }
+      }
+    })
+  );
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       if (clientList.length > 0) {
         const client = clientList[0];
-        client.focus();
+        if ('navigate' in client) return client.navigate(url).then((c) => c && c.focus());
+        return client.focus();
       } else if (clients.openWindow) {
-        clients.openWindow('/');
+        return clients.openWindow(url);
       }
     })
   );

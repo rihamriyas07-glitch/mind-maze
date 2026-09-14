@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   reminderSoundEnabled: true,
   notificationsGranted: false,
   hasSeenNotificationPrompt: false,
+  dailyHoursGoal: 4,
   weeklyHoursGoal: 28,
 };
 
@@ -169,9 +170,19 @@ export function getUserSettings(): UserSettings {
     const normalizedElective: 'Chemistry' | 'ICT' =
       parsed.physicalScienceElective === 'ICT' ? 'ICT' : 'Chemistry';
 
+    // Migrate old weekly-only goal to daily goal (weekly = daily x 7)
+    const migratedDaily =
+      typeof parsed.dailyHoursGoal === 'number'
+        ? parsed.dailyHoursGoal
+        : typeof parsed.weeklyHoursGoal === 'number'
+          ? Math.round((parsed.weeklyHoursGoal / 7) * 10) / 10
+          : DEFAULT_SETTINGS.dailyHoursGoal;
+
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
+      dailyHoursGoal: migratedDaily,
+      weeklyHoursGoal: Math.round(migratedDaily * 7 * 10) / 10,
       stream: normalizedStream,
       physicalScienceElective: normalizedElective,
     };

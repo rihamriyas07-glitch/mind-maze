@@ -24,6 +24,10 @@ import {
   maybeSendDailyCountdown,
   sendStudyNotification,
   playStudyChime,
+  subscribeForPush,
+  unsubscribeFromPush,
+  cleanupStalePushSubscription,
+  listenForPushSubscriptionChange,
 } from './lib/notificationService';
 import {
   calculateStreak,
@@ -354,7 +358,22 @@ export default function App() {
   // "Sync from timetable" button in the Daily Planner.
   useEffect(() => {
     registerServiceWorker();
+    listenForPushSubscriptionChange();
   }, []);
+
+  // Closed-app Web Push: if the student already granted permission in a
+  // previous session, re-register this device on sign-in (subscription is
+  // per browser/device; a new login needs its row in push_subscriptions).
+  // If permission was revoked while away, drop the now-dead subscription row.
+  useEffect(() => {
+    if (!authUserId) return;
+    const status = getNotificationPermissionStatus();
+    if (status === 'granted') {
+      void subscribeForPush().catch(() => undefined);
+    } else if (status === 'denied') {
+      void cleanupStalePushSubscription().catch(() => undefined);
+    }
+  }, [authUserId]);
 
   // ---- Supabase session handling + cloud load/merge ----
   const loadCloudForUser = async (userId: string) => {
@@ -812,6 +831,11 @@ export default function App() {
   }, [streakData, cloudSyncOn]);
 
   const handleSignOut = async () => {
+    try {
+      // Drop this device's closed-app push so a shared device stops
+      // getting the previous student's reminders.
+      await unsubscribeFromPush();
+    } catch {}
     if (supabase) {
       await supabase.auth.signOut();
     }
@@ -1838,6 +1862,13 @@ export default function App() {
             notificationPermission={notificationPermission}
             onRequestNotificationPermission={() => setIsNotificationModalOpen(true)}
             onSendTestNotification={handleTestSmartReminder}
+            onDisablePushNotifications={() => {
+              void unsubscribeFromPush()
+                .catch(() => undefined)
+                .finally(() => {
+                  setSyncToastMessage('🔕 Closed-app push turned off on this device. In-app reminders still work.');
+                });
+            }}
             username={username}
             userRole={userRole}
             isAdmin={userRole === 'admin'}
@@ -1882,6 +1913,11 @@ export default function App() {
             notificationsGranted: perm === 'granted',
             hasSeenNotificationPrompt: true,
           });
+          if (perm === 'denied') {
+            // Student dismissed/denied: drop any stale subscription row for
+            // this device so the server doesn't keep pushing to it.
+            void cleanupStalePushSubscription().catch(() => undefined);
+          }
         }}
       />
 

@@ -26,7 +26,7 @@ import {
   getTodayDayOfWeek,
   getFormattedDateDisplay,
   getDayOfWeekFromDate,
-  computeEndTime,
+  calculateMinutesBetween,
 } from '../../lib/storage';
 import { getSubjectsForStream } from '../../data/alSyllabusData';
 import { SubtopicTargetPicker } from '../common/SubtopicTargetPicker';
@@ -75,11 +75,8 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
   const [newBlockType, setNewBlockType] = useState<BlockType>('study');
   const [selectedTopicId, setSelectedTopicId] = useState('');
   const [selectedTargets, setSelectedTargets] = useState<SubtopicTarget[]>([]);
-  const [newEstimatedMinutes, setNewEstimatedMinutes] = useState(60);
   const [newStartTime, setNewStartTime] = useState('16:00');
   const [newEndTime, setNewEndTime] = useState('17:00');
-  const [syncToTimetable, setSyncToTimetable] = useState(true);
-  const [newPriority, setNewPriority] = useState<'High' | 'Medium' | 'Low'>('High');
 
   const todayStr = getTodayDateString();
   const isViewingToday = selectedDate === todayStr;
@@ -164,12 +161,12 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
       targetProgress: first?.targetProgress,
       subtopicTargets: cleanTargets.length > 0 ? cleanTargets : undefined,
       isCompleted: false,
-      estimatedMinutes: newEstimatedMinutes,
-      priority: newPriority,
+      estimatedMinutes: calculateMinutesBetween(newStartTime, newEndTime),
+      priority: 'Medium',
       timeSlot: `${newStartTime} - ${newEndTime}`,
       startTime: newStartTime,
       endTime: newEndTime,
-      syncToTimetable,
+      syncToTimetable: true,
     });
 
     setNewTitle('');
@@ -181,12 +178,6 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
 
   const handleStartTimeChange = (startVal: string) => {
     setNewStartTime(startVal);
-    setNewEndTime(computeEndTime(startVal, newEstimatedMinutes));
-  };
-
-  const handleMinutesChange = (mins: number) => {
-    setNewEstimatedMinutes(mins);
-    setNewEndTime(computeEndTime(newStartTime, mins));
   };
 
   const openAddTaskModal = () => {
@@ -389,12 +380,6 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
           </div>
         ) : (
           displayedTasks.map((task) => {
-            const priorityColors = {
-              High: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
-              Medium: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-              Low: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-            };
-
             return (
               <div
                 key={task.id}
@@ -430,13 +415,6 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
                       )}
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-slate-200 border border-white/10">
                         {task.subject}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                          priorityColors[task.priority]
-                        }`}
-                      >
-                        {task.priority} Priority
                       </span>
                       {task.timeSlot ? (
                         <span className="text-[10px] text-cyan-300 font-medium flex items-center gap-1 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
@@ -684,54 +662,25 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
                   </div>
                 </div>
 
-                {/* Priority and Time Estimate */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Priority</label>
-                    <select
-                      value={newPriority}
-                      onChange={(e) => setNewPriority(e.target.value as 'High' | 'Medium' | 'Low')}
-                      className="w-full rounded-xl bg-[#161831] border border-white/15 px-3 py-2 text-white font-medium focus:border-cyan-400 focus:outline-none text-xs"
-                    >
-                      <option value="High" className="bg-[#161831] text-white">High Priority</option>
-                      <option value="Medium" className="bg-[#161831] text-white">Medium Priority</option>
-                      <option value="Low" className="bg-[#161831] text-white">Low Priority</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Est. Minutes</label>
-                    <input
-                      type="number"
-                      min={5}
-                      max={360}
-                      step={5}
-                      value={newEstimatedMinutes}
-                      onChange={(e) => handleMinutesChange(Number(e.target.value))}
-                      className="w-full rounded-xl bg-white/5 border border-white/15 px-3 py-2 text-white font-medium focus:border-cyan-400 focus:outline-none text-xs"
-                    />
-                  </div>
+                {/* Auto-calculated duration from Start - End time */}
+                <div className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-[11px] text-slate-300">
+                  <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>
+                    Duration: <strong className="text-white">{calculateMinutesBetween(newStartTime, newEndTime)} min</strong>
+                    <span className="text-slate-400"> • auto-calculated from time above</span>
+                  </span>
                 </div>
 
-                {/* Bi-directional Sync to Weekly Timetable Switch */}
-                <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-3 sm:p-3.5 flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    id="sync-timetable-check"
-                    checked={syncToTimetable}
-                    onChange={(e) => setSyncToTimetable(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-cyan-400 bg-white/10 text-cyan-400 focus:ring-cyan-400 cursor-pointer shrink-0"
-                  />
-                  <label htmlFor="sync-timetable-check" className="text-xs cursor-pointer">
-                    <span className="font-bold text-cyan-300 block flex items-center gap-1.5">
-                      <Link className="w-3.5 h-3.5" />
-                      Sync to Weekly Timetable ({selectedDayOfWeek})
-                    </span>
-                    <span className="text-slate-400 text-[11px] block mt-0.5 leading-relaxed">
-                      Automatically adds a study slot on <strong>{selectedDayOfWeek} ({newStartTime} - {newEndTime})</strong> in your Weekly Timetable.
-                    </span>
-                  </label>
-                </div>
+                {/* Auto-sync to Weekly Timetable - collapsed */}
+                <details className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2.5">
+                  <summary className="flex items-center gap-2 text-xs font-bold text-cyan-300 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                    <Link className="w-4 h-4 text-cyan-300 shrink-0" />
+                    <span>Auto-syncs to Weekly Timetable ({selectedDayOfWeek})</span>
+                  </summary>
+                  <p className="text-slate-400 text-[11px] mt-1.5 leading-relaxed pl-6">
+                    Automatically adds a study slot on <strong>{selectedDayOfWeek} ({newStartTime} - {newEndTime})</strong> in your Weekly Timetable.
+                  </p>
+                </details>
               </div>
 
               {/* Pinned Sticky Footer Action Buttons */}

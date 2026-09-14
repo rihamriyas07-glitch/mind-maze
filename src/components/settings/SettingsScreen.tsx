@@ -28,6 +28,8 @@ interface SettingsScreenProps {
   onRequestNotificationPermission?: () => void;
   /** Sends a real notification so students can confirm it works. */
   onSendTestNotification?: () => void;
+  /** Removes this device's closed-app push subscription (stays signed in). */
+  onDisablePushNotifications?: () => void;
   username?: string | null;
   /** Temporary debug: role the app resolved from profiles.role. */
   userRole?: 'student' | 'admin';
@@ -54,11 +56,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   notificationPermission = 'default',
   onRequestNotificationPermission,
   onSendTestNotification,
+  onDisablePushNotifications,
   cloudSyncEnabled = false,
   onSignOut,
 }) => {
   const [targetYear, setTargetYear] = useState(settings.targetExamYear);
-  const [weeklyGoal, setWeeklyGoal] = useState(settings.weeklyHoursGoal);
+  const [dailyGoal, setDailyGoal] = useState(
+    settings.dailyHoursGoal ?? Math.round((settings.weeklyHoursGoal / 7) * 10) / 10
+  );
   const [examDateInput, setExamDateInput] = useState(settings.targetExamDate || '');
   const [goalZScore, setGoalZScore] = useState(settings.targetZScore || '');
   const [goalNote, setGoalNote] = useState(settings.motivationNote || '');
@@ -66,9 +71,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanDaily = Math.max(0.5, Math.min(16, Number(dailyGoal) || 4));
     onUpdateSettings({
       targetExamYear: targetYear,
-      weeklyHoursGoal: weeklyGoal,
+      dailyHoursGoal: cleanDaily,
+      weeklyHoursGoal: Math.round(cleanDaily * 7 * 10) / 10,
     });
     // Exam date syncs to Supabase too (drives the Dashboard countdown).
     // Blank clears it — countdown hides until a date is set again.
@@ -208,6 +215,16 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 <span>Send Test Notification</span>
               </button>
             )}
+            {notificationPermission === 'granted' && onDisablePushNotifications && (
+              <button
+                type="button"
+                onClick={onDisablePushNotifications}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-slate-300 text-xs font-bold transition cursor-pointer min-h-[44px]"
+              >
+                <BellOff className="w-4 h-4" />
+                <span>Turn Off Push on This Device</span>
+              </button>
+            )}
             {notificationPermission !== 'granted' &&
               notificationPermission !== 'denied' &&
               notificationPermission !== 'unsupported' &&
@@ -318,7 +335,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               Targeting {targetYear} Examination{settings.targetZScore ? ` • Z-Score ${settings.targetZScore}` : ''}
             </h2>
             <p className="text-xs text-slate-300">
-              Customize your target exam sitting and weekly revision hour target. Your Z-Score goal lives in the Goals section below.
+              Customize your target exam sitting and daily study hour goal (weekly target auto-calculates). Your Z-Score goal lives in the Goals section below.
             </p>
             <div className="mt-2">
               <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Expected A/L Exam Date</label>
@@ -359,15 +376,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Weekly Goal (hrs)</label>
+              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Daily Goal (hrs/day)</label>
               <input
                 type="number"
-                min={5}
-                max={70}
-                value={weeklyGoal}
-                onChange={(e) => setWeeklyGoal(Number(e.target.value))}
+                min={0.5}
+                max={16}
+                step={0.5}
+                value={dailyGoal}
+                onChange={(e) => setDailyGoal(Number(e.target.value))}
                 className="w-20 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-xs font-bold text-white focus:outline-none"
               />
+              <p className="text-[10px] text-slate-500 mt-1">→ {Math.round(Number(dailyGoal || 0) * 7 * 10) / 10} hrs/week auto</p>
             </div>
 
             <button

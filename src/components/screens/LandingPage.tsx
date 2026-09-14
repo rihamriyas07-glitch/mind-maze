@@ -6,7 +6,6 @@ import {
   ArrowRight,
   BookOpen,
   Target,
-  Calendar,
   CalendarDays,
   Clock,
   CheckCircle2,
@@ -70,7 +69,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* Top Pill Badge */}
             <div className="inline-flex items-center gap-2 rounded-full border border-purple-400/40 bg-purple-500/15 px-4 py-1.5 text-xs font-semibold text-cyan-300 shadow-[0_0_15px_rgba(107,78,255,0.3)] backdrop-blur-md mb-4">
               <Sparkles className="h-4 w-4 text-cyan-300" />
-              <span>GCE A/L Complete Revision Engine • 2 Streams Supported</span>
+              <span>Your A/L Study Companion • 2 Streams Supported</span>
             </div>
 
             {/* Main Tagline */}
@@ -88,31 +87,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <p className="mt-5 max-w-2xl text-sm sm:text-base md:text-lg text-slate-300 leading-relaxed">
               Stay disciplined on your path to 3 A's. Follow structured syllabus revision plans, manage your interactive weekly study timetable, and track daily cover topics on both computer and mobile.
             </p>
-
-            {/* 3 Core Pillars Pill Summary */}
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5 max-w-3xl">
-              <button
-                onClick={() => onNavigate('study-plan')}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-purple-500/30 text-purple-300 text-xs font-bold hover:bg-purple-500/20 hover:border-purple-400 transition-all cursor-pointer"
-              >
-                <Target className="w-3.5 h-3.5 text-purple-400" />
-                <span>1. Structured Study Plans</span>
-              </button>
-              <button
-                onClick={() => onNavigate('timetable')}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-cyan-500/30 text-cyan-300 text-xs font-bold hover:bg-cyan-500/20 hover:border-cyan-400 transition-all cursor-pointer"
-              >
-                <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                <span>2. Weekly Timetables & Timer</span>
-              </button>
-              <button
-                onClick={() => onNavigate('daily-topics')}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-emerald-500/30 text-emerald-300 text-xs font-bold hover:bg-emerald-500/20 hover:border-emerald-400 transition-all cursor-pointer"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
-                <span>3. Daily Cover Topics</span>
-              </button>
-            </div>
 
             {/* CTA Buttons */}
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-md">
@@ -281,7 +255,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <span className="text-xs font-bold text-white flex items-center gap-1 group-hover:text-cyan-300">
                     Open Routine <ArrowRight className="w-3.5 h-3.5" />
                   </span>
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Select Track</span>
                 </div>
               </div>
             ))}

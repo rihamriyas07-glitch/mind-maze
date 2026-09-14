@@ -101,7 +101,6 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
   const [formReminderEnabled, setFormReminderEnabled] = useState<boolean>(true);
   const [formReminderOffset, setFormReminderOffset] = useState<0 | 10 | 15 | 30 | 60>(15);
   const [formNotes, setFormNotes] = useState<string>('');
-  const [syncToDailyPlanner, setSyncToDailyPlanner] = useState<boolean>(true);
 
   const openAddModal = (defaultDay?: DayOfWeek) => {
     setEditingEntry(null);
@@ -118,7 +117,6 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
     setFormReminderEnabled(true);
     setFormReminderOffset(15);
     setFormNotes('');
-    setSyncToDailyPlanner(true);
     setIsModalOpen(true);
   };
 
@@ -142,7 +140,6 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
     setFormReminderEnabled(entry.reminderEnabled);
     setFormReminderOffset(entry.reminderOffsetMinutes);
     setFormNotes(entry.notes || '');
-    setSyncToDailyPlanner(false);
     setIsModalOpen(true);
   };
 
@@ -224,7 +221,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
         reminderEnabled: formReminderEnabled,
         reminderOffsetMinutes: formReminderOffset,
         notes: formNotes.trim(),
-        syncToDailyPlanner,
+        syncToDailyPlanner: true,
       });
     }
 
@@ -896,32 +893,38 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                 />
               </div>
 
-              {/* Bi-directional Sync to Daily Planner Checkbox */}
+              {/* Auto-synced to Daily Planner - collapsed */}
               {!editingEntry && (
-                <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-3 flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    id="sync-daily-planner-check"
-                    checked={syncToDailyPlanner}
-                    onChange={(e) => setSyncToDailyPlanner(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-cyan-400 bg-white/10 text-cyan-400 focus:ring-cyan-400 cursor-pointer"
-                  />
-                  <label htmlFor="sync-daily-planner-check" className="text-xs cursor-pointer">
-                    <span className="font-bold text-cyan-300 flex items-center gap-1.5">
-                      <Link className="w-3.5 h-3.5" />
-                      Sync with Daily Study Planner ({formDay})
-                    </span>
-                    <span className="text-slate-400 text-[11px] block mt-0.5 leading-relaxed">
-                      Automatically schedules a study task on <strong>{formDay} ({formStartTime} - {formEndTime})</strong> in your Daily Study Planner.
-                    </span>
-                  </label>
-                </div>
+                <details className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2.5">
+                  <summary className="flex items-center gap-2 text-xs font-bold text-cyan-300 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                    <Link className="w-4 h-4 text-cyan-300 shrink-0" />
+                    <span>Auto-syncs with Daily Study Planner ({formDay})</span>
+                  </summary>
+                  <p className="text-slate-400 text-[11px] mt-1.5 leading-relaxed pl-6">
+                    Automatically schedules a study task on <strong>{formDay} ({formStartTime} - {formEndTime})</strong> in your Daily Study Planner.
+                  </p>
+                </details>
               )}
 
               </div>
 
               {/* Submit / Cancel Buttons in Pinned Sticky Footer */}
               <div className="p-3.5 sm:p-4 border-t border-white/10 bg-[#14162e]/95 backdrop-blur-md flex items-center justify-end gap-2.5 shrink-0">
+                {editingEntry && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Delete this study block (${editingEntry.subject} — ${editingEntry.topic})?`)) {
+                        onDeleteEntry(editingEntry.id);
+                        setIsModalOpen(false);
+                      }
+                    }}
+                    className="mr-auto px-4 py-2 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-semibold transition cursor-pointer min-h-[44px] flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
