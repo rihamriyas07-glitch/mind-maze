@@ -18,6 +18,13 @@ webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+// --- WhatsApp daily quiz reminder (separate notification type) ---
+// Twice daily in Sri Lanka time (UTC+5:30): noon + 5pm. Cron ticks every
+// 15 min, so each window below is 15 min wide and deduped per day.
+const WHATSAPP_CHANNEL_URL = "https://whatsapp.com/channel/0029Vb8OnJGCRs1fpYosgU1z";
+const WHATSAPP_QUIZ_ICON = "https://mind-maze-mu.vercel.app/bell.jpeg";
+const SL_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
 function toMinutes(t: string): number {
   const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
@@ -139,6 +146,45 @@ Deno.serve(async (req) => {
     if (n > 0) {
       await markSent(supabase, userId, "nudge", dedupe);
       sent += n;
+    }
+  }
+
+  // --- 3. WhatsApp daily quiz reminder: 12:00 & 17:00 Sri Lanka time ---
+  // Applies to ALL subscribed students (not tied to timetable/streak).
+  // Window check uses SL wall-clock time so deploy-region timezone can't shift it.
+  const slNow = new Date(now.getTime() + SL_OFFSET_MS);
+  const slTodayStr = slNow.toISOString().slice(0, 10); // YYYY-MM-DD in SL time
+  const slNowMin = slNow.getUTCHours() * 60 + slNow.getUTCMinutes();
+  let quizSlot: "noon" | "evening" | null = null;
+  if (slNowMin >= 12 * 60 && slNowMin < 12 * 60 + 15) quizSlot = "noon";
+  else if (slNowMin >= 17 * 60 && slNowMin < 17 * 60 + 15) quizSlot = "evening";
+
+  if (quizSlot) {
+    const dedupe = `whatsapp-quiz-${quizSlot}-${slTodayStr}`;
+    const payload = quizSlot === "noon"
+      ? {
+        title: "📢 Today's quiz is up!",
+        body: "Check the WhatsApp channel now — today's quiz is waiting for you!",
+        tag: dedupe,
+        url: WHATSAPP_CHANNEL_URL,
+        icon: WHATSAPP_QUIZ_ICON,
+      }
+      : {
+        title: "📢 Evening quiz reminder!",
+        body: "Haven't tried today's quiz yet? Tap to open the WhatsApp channel!",
+        tag: dedupe,
+        url: WHATSAPP_CHANNEL_URL,
+        icon: WHATSAPP_QUIZ_ICON,
+      };
+    const { data: allSubs } = await supabase.from("push_subscriptions").select("user_id");
+    const allUserIds = [...new Set((allSubs ?? []).map((s: any) => s.user_id))];
+    for (const userId of allUserIds) {
+      if (await alreadySent(supabase, userId, dedupe)) continue;
+      const n = await sendToUser(supabase, userId, payload);
+      if (n > 0) {
+        await markSent(supabase, userId, "whatsapp_quiz", dedupe);
+        sent += n;
+      }
     }
   }
 

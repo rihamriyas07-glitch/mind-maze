@@ -171,7 +171,10 @@ self.addEventListener('fetch', (event) => {
 
 // Push & Notification handling
 // Real Web Push: fired by the browser's push service even when all tabs
-// are closed. Payload is JSON: { title, body, tag, url }.
+// are closed. Payload is JSON: { title, body, tag, url, icon, badge }.
+// `url` may be an in-app path ("/") or a full external URL (e.g. WhatsApp
+// channel). `icon` is per-type: only the WhatsApp quiz reminder sends a
+// custom icon; everything else falls back to the app icon below.
 self.addEventListener('push', (event) => {
   let data = { title: 'Mind Maze', body: 'Time to study!', tag: 'mind-maze-push', url: '/' };
   try {
@@ -182,8 +185,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      icon: data.icon || '/icon-192.png',
+      badge: data.badge || '/icon-192.png',
       tag: data.tag,
       renotify: true,
       vibrate: [200, 100, 200],
@@ -214,8 +217,23 @@ self.addEventListener('pushsubscriptionchange', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || '/';
+  // External URLs (e.g. WhatsApp channel) can't be handled with
+  // client.navigate() (same-origin only) — open a new window/tab instead.
+  let isExternal = false;
+  try {
+    if (/^https?:\/\//i.test(url)) {
+      isExternal = new URL(url).origin !== self.location.origin;
+    }
+  } catch {
+    isExternal = true;
+  }
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+    (async () => {
+      if (isExternal) {
+        if (clients.openWindow) return clients.openWindow(url);
+        return;
+      }
+      const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
       if (clientList.length > 0) {
         const client = clientList[0];
         if ('navigate' in client) return client.navigate(url).then((c) => c && c.focus());
@@ -223,7 +241,7 @@ self.addEventListener('notificationclick', (event) => {
       } else if (clients.openWindow) {
         return clients.openWindow(url);
       }
-    })
+    })()
   );
 });
 
