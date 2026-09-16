@@ -17,10 +17,10 @@ select cron.schedule(
   '*/15 * * * *',
   $$
   select net.http_post(
-    url := 'https://<PROJECT_REF>.supabase.co/functions/v1/send-push',
+    url := 'https://<oqtwygdzpzrkfrxhjyxl>.supabase.co/functions/v1/send-push',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer <SERVICE_ROLE_KEY>'
+      'Authorization', 'Bearer <eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xdHd5Z2R6cHpya2ZyeGhqeXhsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODc4NDg1NiwiZXhwIjoyMTA0MzYwODU2fQ.nIhOwbuoWyekizBc1R17npn6dqF4gnERPnmNIVerMGY>'
     ),
     body := '{}'::jsonb
   );
