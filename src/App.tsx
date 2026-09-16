@@ -361,6 +361,27 @@ export default function App() {
     listenForPushSubscriptionChange();
   }, []);
 
+  // Keep the notification banners/test buttons truthful: the permission can
+  // change outside React (browser site settings, another tab), leaving the
+  // dashboard stuck on "Not enabled" with no way to test. Re-read the live
+  // permission whenever the tab regains focus.
+  useEffect(() => {
+    const resync = () => {
+      const status = getNotificationPermissionStatus();
+      setNotificationPermission((prev) => (prev === status ? prev : status));
+      if (status === 'denied') {
+        void cleanupStalePushSubscription().catch(() => undefined);
+      }
+    };
+    resync();
+    window.addEventListener('focus', resync);
+    document.addEventListener('visibilitychange', resync);
+    return () => {
+      window.removeEventListener('focus', resync);
+      document.removeEventListener('visibilitychange', resync);
+    };
+  }, []);
+
   // Closed-app Web Push: if the student already granted permission in a
   // previous session, re-register this device on sign-in (subscription is
   // per browser/device; a new login needs its row in push_subscriptions).
@@ -874,7 +895,7 @@ export default function App() {
 
   // Periodic reminder checker every 30 seconds (timetable alerts + nudges + daily countdown)
   useEffect(() => {
-    const interval = setInterval(() => {
+    const runChecks = () => {
       const todayDay = getTodayDayOfWeek();
 
       // 1. Timetable Slot Alert with Smart Contextual Motivation
@@ -901,7 +922,12 @@ export default function App() {
         setActiveToastReminder(countdownRes.message);
         setTimeout(() => setActiveToastReminder(null), 8000);
       }
-    }, 30000);
+    };
+
+    // Run once immediately so due reminders/countdown fire on page open
+    // instead of waiting up to 30s for the first interval tick.
+    runChecks();
+    const interval = setInterval(runChecks, 30000);
 
     return () => clearInterval(interval);
   }, [timetableEntries, dailyTasks, streakData.currentStreak, settings.targetExamDate, settings.motivationNote]);

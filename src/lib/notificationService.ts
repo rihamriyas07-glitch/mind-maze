@@ -99,6 +99,26 @@ export function isPushSupported(): boolean {
 }
 
 /**
+ * Wait for the active service worker registration, but never hang forever.
+ * `navigator.serviceWorker.ready` never resolves when no worker is
+ * registered (e.g. registration failed, or DEV mode unregisters workers),
+ * which used to freeze push subscribe/unsubscribe indefinitely.
+ */
+async function getReadyRegistration(timeoutMs = 3000): Promise<ServiceWorkerRegistration | null> {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null;
+  try {
+    const ready = navigator.serviceWorker.ready;
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+    const reg = await Promise.race([ready, timeout]);
+    if (reg) return reg;
+    // Fallback: an installed-but-not-yet-controlling registration.
+    return (await navigator.serviceWorker.getRegistration().catch(() => null)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Subscribe this browser/device for closed-app push and save it to Supabase.
  * Safe to call repeatedly: reuses the existing subscription and upserts.
  * Returns true when a subscription is stored.
@@ -120,7 +140,13 @@ export async function subscribeForPush(): Promise<boolean> {
     const userId = userData.user?.id;
     if (!userId) return false;
 
-    const reg = await navigator.serviceWorker.ready;
+    // Ensure a worker is registered first (subscribe needs one; `ready`
+    // alone hangs forever when registration failed, e.g. /sw.js 404).
+    let reg = await getReadyRegistration();
+    if (!reg) {
+      reg = await registerServiceWorker();
+    }
+    if (!reg) return false;
     const existing = await reg.pushManager.getSubscription();
     const sub =
       existing ??
@@ -166,7 +192,8 @@ export async function cleanupStalePushSubscription(): Promise<void> {
   try {
     if (!isPushSupported()) return;
     if (Notification.permission === 'granted') return;
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await getReadyRegistration(2000);
+    if (!reg) return;
     const sub = await reg.pushManager.getSubscription();
     if (!sub) return;
     const endpoint = sub.endpoint;
@@ -185,7 +212,8 @@ export async function cleanupStalePushSubscription(): Promise<void> {
 export async function unsubscribeFromPush(): Promise<void> {
   try {
     if (!isPushSupported()) return;
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await getReadyRegistration(2000);
+    if (!reg) return;
     const sub = await reg.pushManager.getSubscription();
     const endpoint = sub?.endpoint;
     if (sub) await sub.unsubscribe().catch(() => undefined);
@@ -268,19 +296,29 @@ export async function sendStudyNotification(
   }
 
   try {
-    // Try service worker showNotification first for PWA background reliability
+    // Prefer the service worker so the notification also works when the tab
+    // is backgrounded and so taps route via the worker's notificationclick
+    // handler. NOTE: getRegistration() alone returns null on pages the worker
+    // doesn't control yet (first load after install), so wait on `ready`
+    // (bounded — it never resolves without a registration) instead.
     if ('serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.getRegistration();
+      const reg = await getReadyRegistration();
       if (reg) {
-        await reg.showNotification(title, {
-          body,
-          icon,
-          badge: '/icon-192.png',
-          tag,
-          renotify: true,
-          vibrate: [200, 100, 200],
-        } as NotificationOptions);
-        return true;
+        try {
+          await reg.showNotification(title, {
+            body,
+            icon,
+            badge: '/icon-192.png',
+            tag,
+            renotify: true,
+            vibrate: [200, 100, 200],
+            data: { url: '/' },
+          } as NotificationOptions);
+          return true;
+        } catch (swErr) {
+          // Fall through to the plain Notification fallback below.
+          console.warn('Service worker showNotification failed, falling back:', swErr);
+        }
       }
     }
 
