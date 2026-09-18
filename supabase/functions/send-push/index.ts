@@ -73,10 +73,20 @@ async function sendToUser(supabase: any, userId: string, payload: object) {
 Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
   const now = new Date();
-  const hour = now.getHours();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const dayName = DAY_NAMES[now.getDay()];
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  // All students are in Sri Lanka (UTC+5:30) but this function runs on
+  // Supabase servers in UTC. Anchor EVERY time comparison below to Sri
+  // Lanka wall-clock time: shift UTC -> SL, then read the result back with
+  // the UTC getters (getUTCHours/getUTCDay) so the deploy region's local
+  // timezone can never shift the logic.
+  const slNow = new Date(now.getTime() + SL_OFFSET_MS);
+  const slHour = slNow.getUTCHours();
+  const slTodayStr = slNow.toISOString().slice(0, 10); // YYYY-MM-DD in SL time
+  const slDayName = DAY_NAMES[slNow.getUTCDay()];
+  const slNowMin = slNow.getUTCHours() * 60 + slNow.getUTCMinutes();
+  // Legacy aliases kept so the rest of the handler reads naturally.
+  const todayStr = slTodayStr;
+  const dayName = slDayName;
+  const nowMin = slNowMin;
 
   let body: any = {};
   try {
@@ -94,14 +104,17 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true, sentToSubscriptions: n });
   }
 
-  // Quiet hours: never push 22:00–08:00 (matches your in-app nudge rules).
-  if (hour < 8 || hour >= 22) {
+  // Quiet hours: never push 22:00–08:00 Sri Lanka time (matches in-app rules).
+  // NOTE: was `now.getHours()` (server UTC) — now uses SL wall-clock hour.
+  if (slHour < 8 || slHour >= 22) {
     return Response.json({ ok: true, skipped: "quiet-hours" });
   }
 
   let sent = 0;
 
   // --- 1. Timetable pre-alerts due in the last 15-min window ---
+  // start_time values are Sri Lanka wall-clock times (e.g. "06:00" = 6am SL),
+  // so dayName/nowMin/todayStr above MUST be the SL-anchored values.
   const { data: slots } = await supabase
     .from("timetable_entries")
     .select("user_id, id, subject, topic, start_time, reminder_offset_minutes")
@@ -128,6 +141,8 @@ Deno.serve(async (req) => {
 
   // --- 2. Daily streak-nudge: one per day for users with incomplete tasks ---
   // (Keeps it cheap: one cron pass, one push per user per day max.)
+  // daily_tasks.date is a client-local (SL) calendar date, so match it
+  // against the SL-anchored todayStr, not server UTC date.
   const { data: tasks } = await supabase
     .from("daily_tasks")
     .select("user_id")
@@ -151,10 +166,9 @@ Deno.serve(async (req) => {
 
   // --- 3. WhatsApp daily quiz reminder: 12:00 & 17:00 Sri Lanka time ---
   // Applies to ALL subscribed students (not tied to timetable/streak).
-  // Window check uses SL wall-clock time so deploy-region timezone can't shift it.
-  const slNow = new Date(now.getTime() + SL_OFFSET_MS);
-  const slTodayStr = slNow.toISOString().slice(0, 10); // YYYY-MM-DD in SL time
-  const slNowMin = slNow.getUTCHours() * 60 + slNow.getUTCMinutes();
+  // Reuses the SL-anchored slNowMin/slTodayStr computed at the top of the
+  // handler so all three notification types share one SL clock.
+  // 12:00 SL = 06:30 UTC, 17:00 SL = 11:30 UTC.
   let quizSlot: "noon" | "evening" | null = null;
   if (slNowMin >= 12 * 60 && slNowMin < 12 * 60 + 15) quizSlot = "noon";
   else if (slNowMin >= 17 * 60 && slNowMin < 17 * 60 + 15) quizSlot = "evening";

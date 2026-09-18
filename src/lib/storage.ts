@@ -296,17 +296,56 @@ export function getDateForDayOfWeekInCurrentWeek(
 }
 
 /**
- * Calculates duration in minutes between "HH:MM" and "HH:MM"
+ * Parses an "HH:MM" (24-hour) string to minutes since midnight.
+ * Returns NaN when the string is not a valid time.
+ */
+export function timeToMinutes(t: string): number {
+  if (typeof t !== 'string') return NaN;
+  const parts = t.trim().split(':');
+  if (parts.length < 2) return NaN;
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return NaN;
+  return h * 60 + m;
+}
+
+/**
+ * True only when both times are valid "HH:MM" values AND end is
+ * strictly after start (same-day ranges; overnight spans are rejected).
+ */
+export function isEndAfterStart(startTime: string, endTime: string): boolean {
+  const s = timeToMinutes(startTime);
+  const e = timeToMinutes(endTime);
+  return Number.isFinite(s) && Number.isFinite(e) && e > s;
+}
+
+/**
+ * Formats "HH:MM" (24-hour) as 12-hour with AM/PM, e.g. "14:05" -> "2:05 PM".
+ * Returns the input unchanged when it cannot be parsed.
+ */
+export function formatTime12h(t: string): string {
+  const mins = timeToMinutes(t);
+  if (!Number.isFinite(mins)) return t;
+  const h24 = Math.floor(mins / 60);
+  const m = mins % 60;
+  const suffix = h24 >= 12 ? 'PM' : 'AM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${suffix}`;
+}
+
+/**
+ * Calculates duration in minutes between "HH:MM" and "HH:MM".
+ * Returns 0 when the range is invalid (end not after start, or
+ * unparseable input) so callers can never mistake a bad range for a
+ * real duration. Use isEndAfterStart() to show a validation error.
  */
 export function calculateMinutesBetween(startTime: string, endTime: string): number {
-  try {
-    const [sh, sm] = startTime.split(':').map(Number);
-    const [eh, em] = endTime.split(':').map(Number);
-    const diff = (eh * 60 + em) - (sh * 60 + sm);
-    return diff > 0 ? diff : 90;
-  } catch {
-    return 90;
-  }
+  const s = timeToMinutes(startTime);
+  const e = timeToMinutes(endTime);
+  if (!Number.isFinite(s) || !Number.isFinite(e)) return 0;
+  const diff = e - s;
+  return diff > 0 ? diff : 0;
 }
 
 /**

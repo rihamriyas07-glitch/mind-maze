@@ -27,6 +27,8 @@ import {
   getFormattedDateDisplay,
   getDayOfWeekFromDate,
   calculateMinutesBetween,
+  formatTime12h,
+  isEndAfterStart,
 } from '../../lib/storage';
 import { getSubjectsForStream } from '../../data/alSyllabusData';
 import { SubtopicTargetPicker } from '../common/SubtopicTargetPicker';
@@ -77,6 +79,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
   const [selectedTargets, setSelectedTargets] = useState<SubtopicTarget[]>([]);
   const [newStartTime, setNewStartTime] = useState('16:00');
   const [newEndTime, setNewEndTime] = useState('17:00');
+  const [timeError, setTimeError] = useState('');
 
   const todayStr = getTodayDateString();
   const isViewingToday = selectedDate === todayStr;
@@ -141,6 +144,14 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
     e.preventDefault();
     if (!newTitle.trim()) return;
 
+    if (!isEndAfterStart(newStartTime, newEndTime)) {
+      setTimeError(
+        `End time (${formatTime12h(newEndTime)}) must be after start time (${formatTime12h(newStartTime)}). Times are 24-hour — e.g. 14:00 = 2:00 PM.`
+      );
+      return;
+    }
+    setTimeError('');
+
     const matchedTopic = syllabusTopics.find((t) => t.id === selectedTopicId);
     const cleanTargets = selectedTargets
       .filter((t) => t.subtopic.trim())
@@ -178,11 +189,13 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
 
   const handleStartTimeChange = (startVal: string) => {
     setNewStartTime(startVal);
+    setTimeError('');
   };
 
   const openAddTaskModal = () => {
     // Fresh form defaults to Study; Revision is opt-in per task.
     setNewBlockType('study');
+    setTimeError('');
     setIsAddTaskModalOpen(true);
   };
 
@@ -638,38 +651,48 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
                   completedOnly={newBlockType === 'revision'}
                 />
 
-                {/* Schedule (Start & End Time) */}
+                {/* Schedule (Start & End Time, 24-hour with AM/PM preview) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Start Time</label>
+                    <label className="block text-slate-300 font-semibold mb-1">Start Time <span className="text-slate-500 font-normal">(24-hour)</span></label>
                     <input
                       type="time"
                       required
                       value={newStartTime}
                       onChange={(e) => handleStartTimeChange(e.target.value)}
-                      className="w-full rounded-xl bg-white/5 border border-white/15 px-3 py-2 text-white font-medium focus:border-cyan-400 focus:outline-none text-xs"
+                      aria-invalid={timeError ? true : undefined}
+                      className={`w-full rounded-xl bg-white/5 border px-3 py-2 text-white font-medium focus:outline-none text-xs ${timeError ? 'border-rose-500 focus:border-rose-400' : 'border-white/15 focus:border-cyan-400'}`}
                     />
+                    <p className="text-[11px] text-cyan-300/90 mt-1 font-semibold">{formatTime12h(newStartTime)}</p>
                   </div>
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">End Time</label>
+                    <label className="block text-slate-300 font-semibold mb-1">End Time <span className="text-slate-500 font-normal">(24-hour)</span></label>
                     <input
                       type="time"
                       required
                       value={newEndTime}
-                      onChange={(e) => setNewEndTime(e.target.value)}
-                      className="w-full rounded-xl bg-white/5 border border-white/15 px-3 py-2 text-white font-medium focus:border-cyan-400 focus:outline-none text-xs"
+                      onChange={(e) => { setNewEndTime(e.target.value); setTimeError(''); }}
+                      aria-invalid={timeError ? true : undefined}
+                      className={`w-full rounded-xl bg-white/5 border px-3 py-2 text-white font-medium focus:outline-none text-xs ${timeError ? 'border-rose-500 focus:border-rose-400' : 'border-white/15 focus:border-cyan-400'}`}
                     />
+                    <p className="text-[11px] text-cyan-300/90 mt-1 font-semibold">{formatTime12h(newEndTime)}</p>
                   </div>
                 </div>
 
                 {/* Auto-calculated duration from Start - End time */}
-                <div className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-[11px] text-slate-300">
-                  <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                  <span>
-                    Duration: <strong className="text-white">{calculateMinutesBetween(newStartTime, newEndTime)} min</strong>
-                    <span className="text-slate-400"> • auto-calculated from time above</span>
-                  </span>
-                </div>
+                {timeError ? (
+                  <p role="alert" className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-semibold text-rose-300">
+                    ⚠️ {timeError}
+                  </p>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-[11px] text-slate-300">
+                    <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>
+                      Duration: <strong className="text-white">{calculateMinutesBetween(newStartTime, newEndTime)} min</strong>
+                      <span className="text-slate-400"> • {formatTime12h(newStartTime)} → {formatTime12h(newEndTime)} • auto-calculated</span>
+                    </span>
+                  </div>
+                )}
 
                 {/* Auto-sync to Weekly Timetable - collapsed */}
                 <details className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2.5">

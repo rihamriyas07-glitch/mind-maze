@@ -25,6 +25,7 @@ import { SUBJECT_METAS, getSubjectsForStream } from '../../data/alSyllabusData';
 import { INITIAL_TIMETABLE_ENTRIES } from '../../data/alSyllabusData';
 import { SubtopicTargetPicker } from '../common/SubtopicTargetPicker';
 import { getBlockSubtopicTargets } from '../../lib/syllabusProgression';
+import { calculateMinutesBetween, formatTime12h, isEndAfterStart } from '../../lib/storage';
 
 interface WeeklyTimetableProps {
   entries: TimetableEntry[];
@@ -101,6 +102,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
   const [formReminderEnabled, setFormReminderEnabled] = useState<boolean>(true);
   const [formReminderOffset, setFormReminderOffset] = useState<0 | 10 | 15 | 30 | 60>(15);
   const [formNotes, setFormNotes] = useState<string>('');
+  const [formTimeError, setFormTimeError] = useState<string>('');
 
   const openAddModal = (defaultDay?: DayOfWeek) => {
     setEditingEntry(null);
@@ -117,6 +119,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
     setFormReminderEnabled(true);
     setFormReminderOffset(15);
     setFormNotes('');
+    setFormTimeError('');
     setIsModalOpen(true);
   };
 
@@ -140,6 +143,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
     setFormReminderEnabled(entry.reminderEnabled);
     setFormReminderOffset(entry.reminderOffsetMinutes);
     setFormNotes(entry.notes || '');
+    setFormTimeError('');
     setIsModalOpen(true);
   };
 
@@ -178,6 +182,17 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
   const handleSaveModal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTopic.trim()) return;
+
+    // End time must be strictly after start time (same-day ranges only).
+    // Previously an invalid range silently fell back to a fake duration;
+    // now it is rejected with an inline error instead of saving.
+    if (!isEndAfterStart(formStartTime, formEndTime)) {
+      setFormTimeError(
+        `End time (${formatTime12h(formEndTime)}) must be after start time (${formatTime12h(formStartTime)}). Times are 24-hour — e.g. 14:00 = 2:00 PM.`
+      );
+      return;
+    }
+    setFormTimeError('');
 
     const cleanTargets = formTargets
       .filter((t) => t.subtopic.trim())
@@ -445,8 +460,8 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
                           <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>
-                            {entry.startTime} – {entry.endTime}
+                          <span title={`${formatTime12h(entry.startTime)} – ${formatTime12h(entry.endTime)}`}>
+                            {formatTime12h(entry.startTime)} – {formatTime12h(entry.endTime)}
                           </span>
                         </div>
 
@@ -625,7 +640,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                             className={`p-2.5 rounded-xl border ${isRev ? 'border-teal-400/50 bg-teal-500/10' : `${colorConfig.border} ${colorConfig.bg}`} text-xs cursor-pointer hover:scale-[1.02] transition shadow-sm`}
                           >
                             <div className="flex items-center justify-between text-[10px] text-slate-300 font-bold mb-1">
-                              <span>{block.startTime}</span>
+                              <span>{formatTime12h(block.startTime)}</span>
                               <span className="flex items-center gap-1">
                                 {isRev && <RefreshCw className="w-2.5 h-2.5 text-teal-300" />}
                                 {block.reminderEnabled && <Bell className="w-2.5 h-2.5 text-emerald-400" />}
@@ -807,29 +822,43 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                 completedOnly={formBlockType === 'revision'}
               />
 
-              {/* Times: Start and End */}
+              {/* Times: Start and End (24-hour inputs with 12-hour AM/PM preview) */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Start Time</label>
+                  <label className="block text-slate-300 font-semibold mb-1">Start Time <span className="text-slate-500 font-normal">(24-hour)</span></label>
                   <input
                     type="time"
                     required
                     value={formStartTime}
-                    onChange={(e) => setFormStartTime(e.target.value)}
-                    className="w-full rounded-xl bg-white/5 border border-white/15 px-3 py-2 text-white font-medium focus:border-cyan-400 focus:outline-none"
+                    onChange={(e) => { setFormStartTime(e.target.value); setFormTimeError(''); }}
+                    aria-invalid={formTimeError ? true : undefined}
+                    className={`w-full rounded-xl bg-white/5 border px-3 py-2 text-white font-medium focus:outline-none ${formTimeError ? 'border-rose-500 focus:border-rose-400' : 'border-white/15 focus:border-cyan-400'}`}
                   />
+                  <p className="text-[11px] text-cyan-300/90 mt-1 font-semibold">{formatTime12h(formStartTime)}</p>
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">End Time</label>
+                  <label className="block text-slate-300 font-semibold mb-1">End Time <span className="text-slate-500 font-normal">(24-hour)</span></label>
                   <input
                     type="time"
                     required
                     value={formEndTime}
-                    onChange={(e) => setFormEndTime(e.target.value)}
-                    className="w-full rounded-xl bg-white/5 border border-white/15 px-3 py-2 text-white font-medium focus:border-cyan-400 focus:outline-none"
+                    onChange={(e) => { setFormEndTime(e.target.value); setFormTimeError(''); }}
+                    aria-invalid={formTimeError ? true : undefined}
+                    className={`w-full rounded-xl bg-white/5 border px-3 py-2 text-white font-medium focus:outline-none ${formTimeError ? 'border-rose-500 focus:border-rose-400' : 'border-white/15 focus:border-cyan-400'}`}
                   />
+                  <p className="text-[11px] text-cyan-300/90 mt-1 font-semibold">{formatTime12h(formEndTime)}</p>
                 </div>
               </div>
+              {formTimeError ? (
+                <p role="alert" className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-semibold text-rose-300">
+                  ⚠️ {formTimeError}
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-400">
+                  Duration: <strong className="text-white">{calculateMinutesBetween(formStartTime, formEndTime)} min</strong>
+                  <span className="text-slate-500"> • {formatTime12h(formStartTime)} → {formatTime12h(formEndTime)}</span>
+                </p>
+              )}
 
               {/* Color Coding */}
               <div>
