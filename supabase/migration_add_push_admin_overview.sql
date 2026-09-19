@@ -83,5 +83,7 @@ as $$
 $$;
 
 -- Least privilege: only signed-in users may call it (and only admins get rows).
-revoke all on function public.get_push_admin_overview() from anon, authenticated;
+-- Revoke from PUBLIC (Postgres grants EXECUTE to PUBLIC by default, so
+-- revoking from named roles alone would silently leave anon access in place).
+revoke all on function public.get_push_admin_overview() from public;
 grant execute on function public.get_push_admin_overview() to authenticated;

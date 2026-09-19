@@ -187,7 +187,16 @@ export async function subscribeForPush(): Promise<boolean> {
     if (!reg) {
       reg = await registerServiceWorker();
     }
-    if (!reg) return false;
+    if (!reg) {
+      // DEV-only note: registerServiceWorker() deliberately stays
+      // unregistered under `vite dev`, so the silent granted-repair below
+      // can never succeed on localhost dev — verify it with a production
+      // build (`npm run build` + `npm run preview`) instead.
+      if (import.meta.env.DEV) {
+        console.info('[Push] No service worker in DEV; skipping silent re-subscribe (expected — test with vite preview).');
+      }
+      return false;
+    }
 
     // Drop a stale subscription from before a VAPID key rotation: pushes to
     // it can never be delivered, and subscribing while it exists throws.

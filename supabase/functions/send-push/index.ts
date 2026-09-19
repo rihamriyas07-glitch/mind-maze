@@ -2,7 +2,8 @@
 // Deploy: supabase functions deploy send-push
 // Secrets: supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:you@example.com
 // Schedule: pg_cron every 15 min -> SELECT net.http_post(...) to this function URL
-//   with service-role key. Manual test: POST {"dryRun": true} or {"testUserId": "<uuid>"}.
+//   with service-role key. Manual test: POST {"dryRun": true} (sends NOTHING,
+//   reports pipeline state) or POST {"testUserId": "<uuid>"} (one real push).
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -10,11 +11,26 @@ import webpush from "npm:web-push@3.6.7";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const VAPID_PUBLIC = Deno.env.get("VAPID_PUBLIC_KEY")!;
-const VAPID_PRIVATE = Deno.env.get("VAPID_PRIVATE_KEY")!;
+const VAPID_PUBLIC = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
+const VAPID_PRIVATE = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@mindmaze.app";
 
-webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+// Lazy VAPID setup: configuring at module top with `!` crashed EVERY
+// invocation (500) when the secrets were never set — including the dryRun
+// diagnostic that exists precisely to detect that state. Instead, sends
+// refuse cleanly per-call and dryRun can still report `vapidConfigured`.
+let vapidReady = false;
+function ensureVapid(): boolean {
+  if (vapidReady) return true;
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return false;
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+    vapidReady = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -48,6 +64,12 @@ async function markSent(supabase: any, userId: string, kind: string, dedupeKey: 
 }
 
 async function sendToUser(supabase: any, userId: string, payload: object) {
+  // No VAPID secrets -> nothing can be delivered; refuse loudly per call
+  // instead of throwing (the dryRun diagnostic reports vapidConfigured).
+  if (!ensureVapid()) {
+    console.warn("push send skipped: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY secrets are not set");
+    return 0;
+  }
   const { data: subs } = await supabase.from("push_subscriptions").select("*").eq("user_id", userId);
   if (!subs?.length) return 0;
   let ok = 0;
@@ -92,6 +114,29 @@ Deno.serve(async (req) => {
   try {
     body = await req.json();
   } catch { /* GET / cron without body */ }
+
+  // --- Diagnostic: POST {"dryRun": true} sends NOTHING — it reports whether
+  // the pipeline is alive, whether VAPID secrets exist, and whether there is
+  // anyone to send to. (Previously the flag was echoed but every push below
+  // still went out — a trap when "just checking".)
+  if (body?.dryRun === true) {
+    const { count: subCount } = await supabase
+      .from("push_subscriptions")
+      .select("user_id", { count: "exact", head: true });
+    const { count: slotCount } = await supabase
+      .from("timetable_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("day_of_week", dayName)
+      .eq("reminder_enabled", true);
+    return Response.json({
+      ok: true,
+      dryRun: true,
+      slTime: `${slTodayStr} ${slDayName} ${slHour}:${String(slNow.getUTCMinutes()).padStart(2, "0")}`,
+      vapidConfigured: !!(VAPID_PUBLIC && VAPID_PRIVATE),
+      subscriptionRows: subCount ?? 0,
+      enabledSlotsToday: slotCount ?? 0,
+    });
+  }
 
   // --- Manual test: POST {"testUserId":"<uuid>"} sends one push immediately ---
   if (body?.testUserId) {
@@ -202,5 +247,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return Response.json({ ok: true, sent, dryRun: body?.dryRun ?? false });
+  return Response.json({ ok: true, sent });
 });

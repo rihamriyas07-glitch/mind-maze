@@ -72,7 +72,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setLoadingPush(true);
     setPushError(null);
     try {
-      setPushOverview(await fetchPushAdminOverview());
+      const overview = await fetchPushAdminOverview();
+      setPushOverview(overview);
+      // Visible in DevTools console: distinguishes "query returned nothing"
+      // from "rows returned but not matched to students" without guessing.
+      console.info(`[Admin] push overview: ${overview.length} user(s) with rows`, overview.map((o) => o.userId));
     } catch (err) {
       setPushOverview([]);
       setPushError(
@@ -144,6 +148,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   }
 
   const adminCount = users.filter((u) => u.role === 'admin').length;
+
+  // Supabase project this build talks to (catches "counted rows in editor
+  // of project A while the app reads project B" instantly).
+  const projectRef = (() => {
+    try {
+      const u = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const host = u ? new URL(u).hostname : '';
+      return host.split('.')[0] || 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  })();
 
   // ---- Push health aggregates ----
   const students = users.filter((u) => u.role !== 'admin');
@@ -248,6 +264,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <dd className="text-base font-black text-slate-300 mt-0.5">{permUnsupported}</dd>
           </div>
         </dl>
+
+        {/* Self-diagnosis: raw query result vs matched students. If these two
+            numbers disagree, the join (not the query) is where rows vanish. */}
+        {!loadingPush && !pushError && (
+          <p className="text-[11px] text-slate-500 -mt-2 mb-3">
+            Overview response: {pushOverview.length} user(s) with rows · {subscribedStudents.length} matched to
+            students · project <code className="text-slate-400">{projectRef}</code>
+            {pushOverview.length > subscribedStudents.length &&
+              ' — some rows belong to unknown/deleted profiles (orphans).'}
+          </p>
+        )}
 
         {pushMigrationOk === false && (
           <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-xs font-semibold mb-3 leading-relaxed">

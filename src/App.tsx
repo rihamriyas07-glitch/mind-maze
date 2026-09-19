@@ -1835,6 +1835,26 @@ export default function App() {
   // landing renders immediately without waiting for the session check.
   // (App screens still wait for auth + cloud sync as before.)
   const [landingReady, setLandingReady] = useState(false);
+  // Returning-session hold: Supabase persists its session in localStorage
+  // (key like `sb-<project-ref>-auth-token`, per origin). When such a token
+  // exists but the session hasn't resolved yet, the visitor is almost
+  // certainly signed in — hold a signing-in splash instead of the landing
+  // page's clickable CTAs so nobody taps "Get Access" in the ~1-3s window
+  // before the auto-redirect to /dashboard fires. Checked once at mount; a
+  // stale/expired token simply resolves to signed-out and the normal
+  // landing page renders afterwards.
+  const [hasStoredSession] = useState(() => {
+    try {
+      if (typeof window === 'undefined') return false;
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
+        if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  });
   useEffect(() => {
     const t = setTimeout(() => setLandingReady(true), 600);
     return () => clearTimeout(t);
@@ -1873,7 +1893,9 @@ export default function App() {
   // Exception: the public landing page renders after a tiny (~600ms)
   // branded pause without waiting for the session check, so it feels
   // instant. A signed-in visitor is still redirected to /dashboard as soon
-  // as the session resolves (see the route-guard effect above).
+  // as the session resolves (see the route-guard effect above). Visitors
+  // with a stored session token instead get a non-clickable signing-in
+  // hold (see hasStoredSession) so Get Access can't win that race.
   const renderLandingPage = () => (
     <LandingPage
       onNavigate={handleLandingNavigate}
@@ -1890,6 +1912,14 @@ export default function App() {
 
   if (!authChecked) {
     if (routePath === '/' && landingReady) {
+      // Possible returning session (stored token, not yet resolved): hold a
+      // non-clickable splash so the auto-redirect wins the race — never show
+      // Get Access / Sign In buttons that lead away from the dashboard.
+      // An expired/invalid token resolves to signed-out and the normal
+      // landing page renders right after.
+      if (hasStoredSession) {
+        return splash('Welcome back…', 'Signing you in — one moment…');
+      }
       return renderLandingPage();
     }
     // Email-confirmation link target: renders immediately with its own
