@@ -16,6 +16,8 @@ import {
   calculateMinutesBetween,
   computeEndTime,
   getSubjectColorKey,
+  timeToMinutes,
+  minutesToHHMM,
 } from './lib/storage';
 import {
   getNotificationPermissionStatus,
@@ -24,7 +26,7 @@ import {
   maybeSendDailyCountdown,
   sendStudyNotification,
   playStudyChime,
-  subscribeForPush,
+  ensureHealthyPushSubscription,
   unsubscribeFromPush,
   cleanupStalePushSubscription,
   listenForPushSubscriptionChange,
@@ -47,8 +49,8 @@ import { MazeBackground } from './components/MazeBackground';
 import { IOSInstallBanner } from './components/IOSInstallBanner';
 import { NotificationPermissionModal } from './components/notifications/NotificationPermissionModal';
 import { DashboardOverview } from './components/dashboard/DashboardOverview';
-import { WeeklyTimetable } from './components/timetable/WeeklyTimetable';
-import { DailyStudyPlanner } from './components/daily/DailyStudyPlanner';
+import { StudyPlanner } from './components/planner/StudyPlanner';
+import { BlockEndCheckin } from './components/planner/BlockEndCheckin';
 import { TopicTracker } from './components/topics/TopicTracker';
 import { ProgressAnalytics } from './components/progress/ProgressAnalytics';
 import {
@@ -82,10 +84,12 @@ import {
   updateProfileElective,
   updateProfileExamDate,
   updateProfileGoals,
+  updateProfileMobileNumber,
   fetchRevisionCount,
   updateProfileRevisionCount,
   toElective,
   toExamDate,
+  toMobileNumber,
   PhysicalElective,
   UserRole,
   CloudError,
@@ -101,11 +105,13 @@ import { WifiOff, Volume2, Link as LinkIcon, CheckCircle2, Loader2, RefreshCw } 
 // ---- URL routing (no router dependency; history API + popstate) ----
 // Public:   "/" (landing for signed-out visitors), "/login", "/signup"
 // Protected (require a session when Supabase is configured):
-//   "/dashboard", "/timetable", "/daily", "/topics", "/progress", "/admin", "/settings"
+//   "/dashboard", "/planner", "/topics", "/progress", "/admin", "/settings"
+// ("/timetable" and "/daily" are legacy aliases that resolve to "/planner".)
 const SCREEN_PATHS: Record<ScreenId, string> = {
   dashboard: '/dashboard',
-  timetable: '/timetable',
-  daily: '/daily',
+  planner: '/planner',
+  timetable: '/planner',
+  daily: '/planner',
   topics: '/topics',
   progress: '/progress',
   admin: '/admin',
@@ -123,10 +129,12 @@ function screenForPath(pathname: string): ScreenId | null {
   switch (normalizePath(pathname)) {
     case '/dashboard':
       return 'dashboard';
+    case '/planner':
+      return 'planner';
     case '/timetable':
-      return 'timetable';
+      return 'planner';
     case '/daily':
-      return 'daily';
+      return 'planner';
     case '/topics':
       return 'topics';
     case '/progress':
@@ -231,6 +239,53 @@ export default function App() {
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
   const [activeToastReminder, setActiveToastReminder] = useState<string | null>(null);
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
+
+  // ---- End-of-block check-in state ----
+  // checkinTaskId: the one block currently asking Completed / More time / Move.
+  // checkinAsked: taskId -> dateStr answered or dismissed (won't re-ask that day).
+  // checkinSnooze: taskId -> epoch ms until which the prompt stays hidden.
+  const CHECKIN_STORE_KEY = 'mindmaze_block_checkin_v1';
+  const [checkinTaskId, setCheckinTaskId] = useState<string | null>(null);
+  const [checkinAsked, setCheckinAsked] = useState<Record<string, string>>(() => {
+    try {
+      return (JSON.parse(localStorage.getItem(CHECKIN_STORE_KEY) || '{}') as { asked?: Record<string, string> }).asked || {};
+    } catch {
+      return {};
+    }
+  });
+  const [checkinSnooze, setCheckinSnooze] = useState<Record<string, number>>(() => {
+    try {
+      return (JSON.parse(localStorage.getItem(CHECKIN_STORE_KEY) || '{}') as { snoozed?: Record<string, number> }).snoozed || {};
+    } catch {
+      return {};
+    }
+  });
+  const persistCheckinStore = (asked: Record<string, string>, snoozed: Record<string, number>) => {
+    try {
+      localStorage.setItem(CHECKIN_STORE_KEY, JSON.stringify({ asked, snoozed }));
+    } catch {
+      /* private mode — in-memory behaviour only */
+    }
+  };
+  const markCheckinAsked = (taskId: string, dateStr: string) => {
+    setCheckinAsked((prev) => {
+      const next = { ...prev, [taskId]: dateStr };
+      persistCheckinStore(next, checkinSnoozeRef.current);
+      return next;
+    });
+  };
+  const checkinSnoozeRef = useRef<Record<string, number>>({});
+  checkinSnoozeRef.current = checkinSnooze;
+  const clearCheckinAsked = (taskId: string) => {
+    // Re-arm the prompt (used after extend/move so the new end time asks again).
+    setCheckinAsked((prev) => {
+      if (!(taskId in prev)) return prev;
+      const next = { ...prev };
+      delete next[taskId];
+      persistCheckinStore(next, checkinSnoozeRef.current);
+      return next;
+    });
+  };
 
   // Celebration queue: day-complete / subject-complete / streak-milestone
   // modals. Only the first shows; closing it reveals the next (max 3 queued).
@@ -364,14 +419,15 @@ export default function App() {
   // Keep the notification banners/test buttons truthful: the permission can
   // change outside React (browser site settings, another tab), leaving the
   // dashboard stuck on "Not enabled" with no way to test. Re-read the live
-  // permission whenever the tab regains focus.
+  // permission whenever the tab regains focus, and run the silent background
+  // heal (throttled): granted devices re-verify their subscription/row,
+  // denied devices drop dead rows. Never-asked devices are left alone so the
+  // existing Enable prompts keep showing as before.
   useEffect(() => {
     const resync = () => {
       const status = getNotificationPermissionStatus();
       setNotificationPermission((prev) => (prev === status ? prev : status));
-      if (status === 'denied') {
-        void cleanupStalePushSubscription().catch(() => undefined);
-      }
+      void ensureHealthyPushSubscription().catch(() => undefined);
     };
     resync();
     window.addEventListener('focus', resync);
@@ -382,18 +438,14 @@ export default function App() {
     };
   }, []);
 
-  // Closed-app Web Push: if the student already granted permission in a
-  // previous session, re-register this device on sign-in (subscription is
-  // per browser/device; a new login needs its row in push_subscriptions).
-  // If permission was revoked while away, drop the now-dead subscription row.
+  // Closed-app Web Push, self-healing: on every sign-in (including the
+  // restored session on app load), silently verify this device's subscription
+  // matches the current VAPID key and has a server row — stale ones are
+  // dropped and recreated with no student action. Revoked permissions drop
+  // the dead row instead. Never-asked students see no change here.
   useEffect(() => {
     if (!authUserId) return;
-    const status = getNotificationPermissionStatus();
-    if (status === 'granted') {
-      void subscribeForPush().catch(() => undefined);
-    } else if (status === 'denied') {
-      void cleanupStalePushSubscription().catch(() => undefined);
-    }
+    void ensureHealthyPushSubscription({ force: true }).catch(() => undefined);
   }, [authUserId]);
 
   // ---- Supabase session handling + cloud load/merge ----
@@ -411,6 +463,7 @@ export default function App() {
       let profileExamDate = toExamDate(profile.alExamDate);
       let profileZScore = profile.targetZScore?.trim() || null;
       let profileNote = profile.motivationNote?.trim() || null;
+      let profileMobile = toMobileNumber(profile.mobileNumber);
       // Pending sign-up extras (email-confirm flow: no session at sign-up).
       let pendingTopicIds: string[] = [];
       if (!name) {
@@ -423,6 +476,7 @@ export default function App() {
         let pendingExamDate: string | null = null;
         let pendingZScore: string | null = null;
         let pendingNote: string | null = null;
+        let pendingMobile: string | null = null;
         try {
           pending = localStorage.getItem('mindmaze_pending_username');
           pendingStream = localStorage.getItem('mindmaze_pending_stream');
@@ -430,6 +484,7 @@ export default function App() {
           pendingExamDate = toExamDate(localStorage.getItem('mindmaze_pending_exam_date'));
           pendingZScore = localStorage.getItem('mindmaze_pending_zscore')?.trim() || null;
           pendingNote = localStorage.getItem('mindmaze_pending_note')?.trim() || null;
+          pendingMobile = toMobileNumber(localStorage.getItem('mindmaze_pending_mobile'));
           try {
             const rawTopics = localStorage.getItem('mindmaze_pending_topics');
             const parsed = rawTopics ? JSON.parse(rawTopics) : [];
@@ -453,7 +508,8 @@ export default function App() {
               pendingElective,
               pendingExamDate,
               pendingZScore,
-              pendingNote
+              pendingNote,
+              pendingMobile
             );
             name = pending.trim();
             profileStream = pendingStream;
@@ -461,6 +517,7 @@ export default function App() {
             profileExamDate = pendingExamDate;
             profileZScore = pendingZScore;
             profileNote = pendingNote;
+            profileMobile = pendingMobile;
             try {
               localStorage.removeItem('mindmaze_pending_username');
               localStorage.removeItem('mindmaze_pending_stream');
@@ -468,6 +525,7 @@ export default function App() {
               localStorage.removeItem('mindmaze_pending_exam_date');
               localStorage.removeItem('mindmaze_pending_zscore');
               localStorage.removeItem('mindmaze_pending_note');
+              localStorage.removeItem('mindmaze_pending_mobile');
             } catch {}
           } catch {
             name = null; // Taken meanwhile — ask the student to pick another.
@@ -536,12 +594,14 @@ export default function App() {
         setSettings(saveUserSettings({ targetExamDate: profileExamDate }));
       }
 
-      // Goals sync down the same way (Z-score + motivation note). Local
-      // values stay when the profile has none (e.g. pre-goals accounts).
+      // Goals + contact number sync down the same way (Z-score,
+      // motivation note, mobile number). Local values stay when the profile
+      // has none (e.g. pre-goals accounts or skipped sign-up fields).
       {
         const patch: Partial<UserSettings> = {};
         if (profileZScore) patch.targetZScore = profileZScore;
         if (profileNote) patch.motivationNote = profileNote;
+        if (profileMobile) patch.mobileNumber = profileMobile;
         if (Object.keys(patch).length > 0) {
           setSettings(saveUserSettings(patch));
         }
@@ -922,6 +982,39 @@ export default function App() {
         setActiveToastReminder(countdownRes.message);
         setTimeout(() => setActiveToastReminder(null), 8000);
       }
+
+      // 4. End-of-block check-in: today's incomplete block whose end time just
+      //    passed and hasn't been answered/snoozed yet. One prompt at a time.
+      if (!checkinTaskId) {
+        try {
+          const now = new Date();
+          const nowMins = now.getHours() * 60 + now.getMinutes();
+          const todayStr = getTodayDateString();
+          const candidate = dailyTasks
+            .filter((t) => {
+              if (t.date !== todayStr || t.isCompleted || !t.endTime) return false;
+              const endMins = timeToMinutes(t.endTime);
+              if (!Number.isFinite(endMins) || nowMins < endMins) return false;
+              if (checkinAsked[t.id] === todayStr) return false;
+              const snoozedUntil = checkinSnooze[t.id];
+              if (typeof snoozedUntil === 'number' && Date.now() < snoozedUntil) return false;
+              return true;
+            })
+            .sort((a, b) => (a.endTime || '').localeCompare(b.endTime || ''))[0];
+          if (candidate) {
+            setCheckinTaskId(candidate.id);
+            playStudyChime();
+            sendStudyNotification(
+              `⏰ Time's up: ${candidate.title}`,
+              'Did you finish? Tap to mark done, add more time, or move it.',
+              '/icon-192.png',
+              `mind-maze-block-end-${candidate.id}`
+            );
+          }
+        } catch {
+          /* clock parsing must never break the reminder loop */
+        }
+      }
     };
 
     // Run once immediately so due reminders/countdown fire on page open
@@ -930,7 +1023,7 @@ export default function App() {
     const interval = setInterval(runChecks, 30000);
 
     return () => clearInterval(interval);
-  }, [timetableEntries, dailyTasks, streakData.currentStreak, settings.targetExamDate, settings.motivationNote]);
+  }, [timetableEntries, dailyTasks, streakData.currentStreak, settings.targetExamDate, settings.motivationNote, checkinTaskId, checkinAsked, checkinSnooze]);
 
   // Manual Test Triggers for Review & Instant Verification
   const handleTestSmartReminder = () => {
@@ -1428,6 +1521,141 @@ export default function App() {
     setSyncToastMessage(`🔗 Imported ${newTasks.length} study block(s) from ${targetDay} Timetable into Daily Planner!`);
   };
 
+  /**
+   * Pushes same-day tasks overlapping [regionStart, shiftTo) forward so the day
+   * never double-books after an extend/move. Tasks without clock times and the
+   * edited block itself are untouched; shifted blocks keep their durations, so
+   * their Time Progress contribution is unchanged.
+   * Returns { tasks, shiftedCount }.
+   */
+  const cascadeShiftDay = (
+    allTasks: DailyTask[],
+    date: string,
+    excludeId: string,
+    regionStart: string,
+    shiftTo: string
+  ): { tasks: DailyTask[]; shiftedCount: number } => {
+    const regionStartMins = timeToMinutes(regionStart);
+    let cursor = timeToMinutes(shiftTo);
+    if (!Number.isFinite(regionStartMins) || !Number.isFinite(cursor)) return { tasks: allTasks, shiftedCount: 0 };
+    const ordered = allTasks
+      .filter((t) => t.date === date && t.id !== excludeId && t.startTime && t.endTime)
+      .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+    const shifted = new Map<string, DailyTask>();
+    for (const t of ordered) {
+      const s = timeToMinutes(t.startTime || '');
+      const e = timeToMinutes(t.endTime || '');
+      if (!Number.isFinite(s) || !Number.isFinite(e)) continue;
+      if (s < cursor && e > regionStartMins) {
+        const dur = Math.max(0, e - s);
+        const ns = minutesToHHMM(cursor);
+        const ne = minutesToHHMM(cursor + dur);
+        shifted.set(t.id, { ...t, startTime: ns, endTime: ne, timeSlot: `${ns} - ${ne}` });
+        cursor += dur;
+      }
+    }
+    if (shifted.size === 0) return { tasks: allTasks, shiftedCount: 0 };
+    return { tasks: allTasks.map((t) => shifted.get(t.id) || t), shiftedCount: shifted.size };
+  };
+
+  /** Keeps a linked weekly-timetable slot (created from this task) in sync. */
+  const syncLinkedTimetableTimes = (
+    allEntries: TimetableEntry[],
+    taskId: string,
+    startTime: string,
+    endTime: string
+  ): TimetableEntry[] =>
+    allEntries.map((e) => (e.fromTaskId === taskId ? { ...e, startTime, endTime } : e));
+
+  /** "Need more time": grows the block; extra minutes raise estimatedMinutes so Time Progress counts them. */
+  const handleExtendTask = (taskId: string, extraMinutes: number) => {
+    const task = dailyTasks.find((t) => t.id === taskId);
+    if (!task || !task.endTime) return;
+    const oldEnd = task.endTime;
+    const newEnd = minutesToHHMM(timeToMinutes(oldEnd) + extraMinutes);
+    const baseDuration =
+      typeof task.estimatedMinutes === 'number' && task.estimatedMinutes > 0
+        ? task.estimatedMinutes
+        : calculateMinutesBetween(task.startTime || oldEnd, oldEnd);
+    const withExtended = dailyTasks.map((t) =>
+      t.id === taskId
+        ? {
+            ...t,
+            endTime: newEnd,
+            timeSlot: t.startTime ? `${t.startTime} - ${newEnd}` : t.timeSlot,
+            estimatedMinutes: baseDuration + extraMinutes,
+          }
+        : t
+    );
+    const { tasks: shifted, shiftedCount } = cascadeShiftDay(withExtended, task.date, taskId, oldEnd, newEnd);
+    setDailyTasks(shifted);
+    saveStoredDailyTasks(shifted);
+    if (task.startTime) {
+      const updatedTimetable = syncLinkedTimetableTimes(timetableEntries, taskId, task.startTime, newEnd);
+      setTimetableEntries(updatedTimetable);
+      saveStoredTimetable(updatedTimetable);
+    }
+    clearCheckinAsked(taskId); // re-arm: the new end time will ask again
+    setCheckinTaskId(null);
+    setSyncToastMessage(
+      `⏱ Extended "${task.title}" +${extraMinutes}m — counts toward Time Progress` +
+        (shiftedCount > 0 ? ` • shifted ${shiftedCount} later block${shiftedCount === 1 ? '' : 's'} today.` : '.')
+    );
+  };
+
+  /** "Plan it for another time": same duration, new slot; overlapping blocks shift forward. */
+  const handleMoveTask = (taskId: string, newStart: string) => {
+    const task = dailyTasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const duration =
+      typeof task.estimatedMinutes === 'number' && task.estimatedMinutes > 0
+        ? task.estimatedMinutes
+        : task.startTime && task.endTime
+          ? calculateMinutesBetween(task.startTime, task.endTime)
+          : 60;
+    const newEnd = minutesToHHMM(timeToMinutes(newStart) + duration);
+    const withMoved = dailyTasks.map((t) =>
+      t.id === taskId
+        ? { ...t, startTime: newStart, endTime: newEnd, timeSlot: `${newStart} - ${newEnd}` }
+        : t
+    );
+    const { tasks: shifted, shiftedCount } = cascadeShiftDay(withMoved, task.date, taskId, newStart, newEnd);
+    setDailyTasks(shifted);
+    saveStoredDailyTasks(shifted);
+    const updatedTimetable = syncLinkedTimetableTimes(timetableEntries, taskId, newStart, newEnd);
+    setTimetableEntries(updatedTimetable);
+    saveStoredTimetable(updatedTimetable);
+    clearCheckinAsked(taskId); // re-arm: the new end time will ask again
+    setCheckinTaskId(null);
+    setSyncToastMessage(
+      `↷ Moved "${task.title}" to ${newStart} - ${newEnd}` +
+        (shiftedCount > 0 ? ` • shifted ${shiftedCount} overlapping block${shiftedCount === 1 ? '' : 's'}.` : '.')
+    );
+  };
+
+  // ---- Check-in dialog actions ----
+  const checkinTask = checkinTaskId ? dailyTasks.find((t) => t.id === checkinTaskId) || null : null;
+  const handleCheckinComplete = () => {
+    if (!checkinTaskId) return;
+    const target = dailyTasks.find((t) => t.id === checkinTaskId);
+    if (target && !target.isCompleted) handleToggleTask(checkinTaskId);
+    if (target) markCheckinAsked(checkinTaskId, target.date);
+    setCheckinTaskId(null);
+  };
+  const handleCheckinSnooze = () => {
+    if (!checkinTaskId) return;
+    const snoozed = { ...checkinSnoozeRef.current, [checkinTaskId]: Date.now() + 10 * 60 * 1000 };
+    setCheckinSnooze(snoozed);
+    persistCheckinStore(checkinAsked, snoozed);
+    setCheckinTaskId(null);
+  };
+  const handleCheckinDismiss = () => {
+    if (!checkinTaskId) return;
+    const target = dailyTasks.find((t) => t.id === checkinTaskId);
+    if (target) markCheckinAsked(checkinTaskId, target.date);
+    setCheckinTaskId(null);
+  };
+
   // Syllabus Topics Handlers
   const handleUpdateTopicStatus = (topicId: string, status: TopicStatus) => {
     const updated = syllabusTopics.map((t) => {
@@ -1525,15 +1753,32 @@ export default function App() {
     });
   };
 
+  // Contact number: stored info only (never auth/OTP). Saved locally
+  // instantly and synced to the Supabase profile when signed in.
+  // Blank clears the field.
+  const handleUpdateMobileNumber = (mobileNumber: string) => {
+    const clean = toMobileNumber(mobileNumber);
+    const updated = saveUserSettings({ mobileNumber: clean ?? '' });
+    setSettings(updated);
+    const uid = authUserIdRef.current;
+    if (!uid || !isSupabaseConfigured || !supabase) return;
+    updateProfileMobileNumber(uid, clean).catch((err) => {
+      console.warn('Mobile number cloud sync failed:', err);
+      setSyncToastMessage('⚠️ Mobile number saved on this device, but cloud sync failed. It will retry on your next change.');
+    });
+  };
+
   const handleUpdateSettings = (partial: Partial<UserSettings>) => {
     const updated = saveUserSettings(partial);
     setSettings(updated);
   };
 
   // Navigation (in-app screens also update the URL so refresh/back button work)
+  // Legacy 'timetable' / 'daily' ids resolve to the unified 'planner' screen.
   const handleNavigate = (screen: ScreenId) => {
-    setCurrentScreen(screen);
-    navigateTo(SCREEN_PATHS[screen]);
+    const resolved: ScreenId = screen === 'timetable' || screen === 'daily' ? 'planner' : screen;
+    setCurrentScreen(resolved);
+    navigateTo(SCREEN_PATHS[resolved]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1601,7 +1846,7 @@ export default function App() {
   const pendingCount = dailyTasks.filter((t) => t.date === todayDate && !t.isCompleted).length;
 
   const splash = (message: string, sub?: string) => (
-    <div className="relative min-h-screen bg-[#0F1023] bg-[radial-gradient(circle_at_top_right,_#1a1b3d_0%,_#0F1023_100%)] text-slate-100 flex items-center justify-center px-4 font-['Poppins',sans-serif]">
+    <div className="relative min-h-dvh bg-[#0F1023] bg-[radial-gradient(circle_at_top_right,_#1a1b3d_0%,_#0F1023_100%)] text-slate-100 flex items-center justify-center px-4 font-['Poppins',sans-serif]">
       <MazeBackground opacity={0.25} />
       <div className="relative text-center space-y-4">
         <img
@@ -1709,7 +1954,7 @@ export default function App() {
   }
 
   return (
-    <div className="relative min-h-screen bg-[#0F1023] bg-[radial-gradient(circle_at_top_right,_#1a1b3d_0%,_#0F1023_100%)] text-slate-100 flex flex-col selection:bg-[#6B4EFF] selection:text-white font-['Poppins',sans-serif]">
+    <div className="relative min-h-dvh bg-[#0F1023] bg-[radial-gradient(circle_at_top_right,_#1a1b3d_0%,_#0F1023_100%)] text-slate-100 flex flex-col selection:bg-[#6B4EFF] selection:text-white font-['Poppins',sans-serif]">
       {/* Visual Ambient Maze Grid */}
       <MazeBackground opacity={0.25} />
 
@@ -1723,17 +1968,18 @@ export default function App() {
 
       {/* Active study reminder toast pop-up */}
       {activeToastReminder && (
-        <div className="fixed top-20 right-4 z-50 max-w-sm rounded-2xl border border-cyan-400/50 bg-[#161831]/95 p-4 shadow-2xl backdrop-blur-xl animate-bounce flex items-start gap-3">
+        <div className="fixed top-20 left-4 right-4 sm:left-auto sm:max-w-sm z-50 rounded-2xl border border-cyan-400/50 bg-[#161831]/95 p-4 shadow-2xl backdrop-blur-xl animate-bounce flex items-start gap-3">
           <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300">
             <Volume2 className="w-5 h-5 animate-pulse" />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <span className="text-xs font-bold text-cyan-300 uppercase block">Study Time Reminder</span>
-            <p className="text-xs font-semibold text-white mt-0.5">{activeToastReminder}</p>
+            <p className="text-xs font-semibold text-white mt-0.5 break-words">{activeToastReminder}</p>
           </div>
           <button
             onClick={() => setActiveToastReminder(null)}
-            className="text-slate-400 hover:text-white text-xs p-1"
+            aria-label="Dismiss reminder"
+            className="text-slate-400 hover:text-white text-xs p-2 rounded-lg hover:bg-white/10 transition shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
             ✕
           </button>
@@ -1742,17 +1988,18 @@ export default function App() {
 
       {/* Bi-directional Sync Notification Toast */}
       {syncToastMessage && (
-        <div className="fixed top-20 right-4 z-50 max-w-md rounded-2xl border border-cyan-400/60 bg-[#161831]/95 p-4 shadow-2xl backdrop-blur-xl flex items-start gap-3 animate-fadeIn">
-          <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-400/30">
+        <div className="fixed top-20 left-4 right-4 sm:left-auto sm:max-w-md z-50 rounded-2xl border border-cyan-400/60 bg-[#161831]/95 p-4 shadow-2xl backdrop-blur-xl flex items-start gap-3 animate-fadeIn">
+          <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-400/30 shrink-0">
             <LinkIcon className="w-5 h-5 text-cyan-300" />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <span className="text-[11px] font-bold text-cyan-300 uppercase tracking-wider block">Timetable & Planner Synced</span>
-            <p className="text-xs font-medium text-slate-200 mt-0.5 leading-relaxed">{syncToastMessage}</p>
+            <p className="text-xs font-medium text-slate-200 mt-0.5 leading-relaxed break-words">{syncToastMessage}</p>
           </div>
           <button
             onClick={() => setSyncToastMessage(null)}
-            className="text-slate-400 hover:text-white text-xs p-1 rounded hover:bg-white/10"
+            aria-label="Dismiss notification"
+            className="text-slate-400 hover:text-white text-xs p-2 rounded-lg hover:bg-white/10 transition shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
             ✕
           </button>
@@ -1826,9 +2073,10 @@ export default function App() {
           />
         )}
 
-        {currentScreen === 'timetable' && (
-          <WeeklyTimetable
+        {(currentScreen === 'planner' || currentScreen === 'timetable' || currentScreen === 'daily') && (
+          <StudyPlanner
             entries={timetableEntries}
+            tasks={dailyTasks}
             syllabusTopics={syllabusTopics}
             stream={settings.stream}
             physicalScienceElective={settings.physicalScienceElective}
@@ -1837,17 +2085,6 @@ export default function App() {
             onDeleteEntry={handleDeleteTimetableEntry}
             onResetTimetable={handleResetTimetable}
             onToggleEntryCompletion={handleToggleTimetableEntryCompletion}
-            onRequestNotificationPermission={() => setIsNotificationModalOpen(true)}
-          />
-        )}
-
-        {currentScreen === 'daily' && (
-          <DailyStudyPlanner
-            tasks={dailyTasks}
-            timetableEntries={timetableEntries}
-            syllabusTopics={syllabusTopics}
-            stream={settings.stream}
-            physicalScienceElective={settings.physicalScienceElective}
             onToggleTask={handleToggleTask}
             onAddTask={handleAddDailyTask}
             onDeleteTask={handleDeleteDailyTask}
@@ -1885,6 +2122,7 @@ export default function App() {
             onUpdateSettings={handleUpdateSettings}
             onUpdateExamDate={handleUpdateExamDate}
             onUpdateGoals={handleUpdateGoals}
+            onUpdateMobileNumber={handleUpdateMobileNumber}
             notificationPermission={notificationPermission}
             onRequestNotificationPermission={() => setIsNotificationModalOpen(true)}
             onSendTestNotification={handleTestSmartReminder}
@@ -1949,6 +2187,19 @@ export default function App() {
 
       {/* iOS Safari PWA Install Banner */}
       <IOSInstallBanner />
+
+      {/* End-of-block check-in: fires on any screen when a block's end time passes */}
+      {checkinTask && (
+        <BlockEndCheckin
+          task={checkinTask}
+          dayTasks={dailyTasks.filter((t) => t.date === checkinTask.date)}
+          onComplete={handleCheckinComplete}
+          onExtend={(mins) => handleExtendTask(checkinTask.id, mins)}
+          onMove={(newStart) => handleMoveTask(checkinTask.id, newStart)}
+          onSnooze={handleCheckinSnooze}
+          onDismiss={handleCheckinDismiss}
+        />
+      )}
     </div>
   );
 }

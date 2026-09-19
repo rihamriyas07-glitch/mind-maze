@@ -78,6 +78,19 @@ export interface UserProfileRow {
   targetZScore: string | null;
   /** Optional personal motivation note; null when unset. */
   motivationNote: string | null;
+  /** Optional contact number (stored info only — never auth/OTP); null when unset. */
+  mobileNumber: string | null;
+  /** Last browser notification permission reported by the student's device;
+   *  null when never reported (never asked, or pre-telemetry app version). */
+  pushPermission: PushPermission | null;
+}
+
+/** Browser notification permission as reported by a student's device. */
+export type PushPermission = 'granted' | 'denied' | 'default' | 'unsupported';
+
+/** Normalize a raw permission value; null when missing/invalid. */
+export function toPushPermission(v: unknown): PushPermission | null {
+  return v === 'granted' || v === 'denied' || v === 'default' || v === 'unsupported' ? v : null;
 }
 
 /** Normalize a raw elective value; null when missing/invalid. */
@@ -92,6 +105,26 @@ export function toExamDate(v: unknown): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
   const d = new Date(t + 'T00:00:00');
   return Number.isNaN(d.getTime()) ? null : t;
+}
+
+/**
+ * Light sanity check for the optional contact number (stored info only —
+ * never auth/OTP/verification). Accepts digits with an optional leading '+'
+ * plus common separators (spaces, dashes, parentheses). Returns the trimmed
+ * value (max 30 chars) or null when blank. Never throws and never blocks:
+ * callers store whatever the student typed; this only trims/caps length.
+ */
+export function toMobileNumber(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim().slice(0, 30);
+  return t ? t : null;
+}
+
+/** True when a typed number looks plausible (7–15 digits); hint only, never blocking. */
+export function isMobileNumberPlausible(v: string): boolean {
+  const digits = v.replace(/\D/g, '');
+  if (digits.length < 7 || digits.length > 15) return false;
+  return /^[+\d][\d\s\-().]*$/.test(v.trim());
 }
 
 /** True when a Supabase error means "column does not exist" (pre-migration DB).
@@ -115,6 +148,8 @@ export async function fetchUserProfile(userId: string): Promise<UserProfileRow> 
   // Layered back-compat: each level drops one more column, so any
   // combination of pre-migration tables still resolves.
   const levels = [
+    'username, stream, role, elective, al_exam_date, target_z_score, motivation_note, mobile_number, push_permission',
+    'username, stream, role, elective, al_exam_date, target_z_score, motivation_note, mobile_number',
     'username, stream, role, elective, al_exam_date, target_z_score, motivation_note',
     'username, stream, role, elective, al_exam_date',
     'username, stream, role, elective',
@@ -131,7 +166,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfileRow> 
         .eq('id', userId)
         .maybeSingle();
       if (error) throw error;
-      const row = (data ?? {}) as { username?: string | null; stream?: string | null; role?: string | null; elective?: string | null; al_exam_date?: string | null; target_z_score?: string | null; motivation_note?: string | null };
+      const row = (data ?? {}) as { username?: string | null; stream?: string | null; role?: string | null; elective?: string | null; al_exam_date?: string | null; target_z_score?: string | null; motivation_note?: string | null; mobile_number?: string | null; push_permission?: string | null };
       const textOrNull = (v: unknown): string | null => {
         if (typeof v !== 'string') return null;
         const t = v.trim();
@@ -145,6 +180,8 @@ export async function fetchUserProfile(userId: string): Promise<UserProfileRow> 
         alExamDate: cols.includes('al_exam_date') ? toExamDate(row.al_exam_date) : null,
         targetZScore: cols.includes('target_z_score') ? textOrNull(row.target_z_score) : null,
         motivationNote: cols.includes('motivation_note') ? textOrNull(row.motivation_note) : null,
+        mobileNumber: cols.includes('mobile_number') ? toMobileNumber(row.mobile_number) : null,
+        pushPermission: cols.includes('push_permission') ? toPushPermission(row.push_permission) : null,
       };
     } catch (err) {
       if (!isMissingColumnError(err)) {
@@ -186,7 +223,8 @@ export async function createProfile(
   elective?: PhysicalElective | null,
   alExamDate?: string | null,
   targetZScore?: string | null,
-  motivationNote?: string | null
+  motivationNote?: string | null,
+  mobileNumber?: string | null
 ): Promise<void> {
   // NOTE: role is ALWAYS 'student' here. There is intentionally no role
   // parameter — students can never self-assign another role. The database
@@ -201,6 +239,10 @@ export async function createProfile(
   if (motivationNote && motivationNote.trim()) {
     baseRow.motivation_note = motivationNote.trim().slice(0, 500);
   }
+  // Optional contact number — stored info only, never auth/OTP. Light
+  // trim/cap only; never blocks sign-up when blank or imperfect.
+  const cleanMobile = toMobileNumber(mobileNumber);
+  if (cleanMobile) baseRow.mobile_number = cleanMobile;
   // Cast: the generated client types predate the stream/role/elective/exam
   // columns; the extra keys pass through at runtime and are stripped below
   // if the DB lacks them (pre-migration databases).
@@ -224,6 +266,7 @@ export async function createProfile(
         if (/al_exam_date/i.test(errMsg)) delete fallbackRow.al_exam_date;
         if (/target_z_score/i.test(errMsg)) delete fallbackRow.target_z_score;
         if (/motivation_note/i.test(errMsg)) delete fallbackRow.motivation_note;
+        if (/mobile_number/i.test(errMsg)) delete fallbackRow.mobile_number;
         // If nothing was stripped (unrecognized missing column), rethrow.
         if (Object.keys(fallbackRow).length === Object.keys(baseRow).length) throw error;
         const retry = await requireClient()
@@ -252,6 +295,8 @@ export interface AdminProfileEntry {
   stream: string | null;
   role: UserRole;
   createdAt: string | null;
+  /** Last reported browser permission; null = never reported (not asked / old client). */
+  pushPermission: PushPermission | null;
 }
 
 /**
@@ -260,23 +305,88 @@ export interface AdminProfileEntry {
  * which the Admin Panel surfaces as "access denied".
  */
 export async function fetchAllProfiles(): Promise<AdminProfileEntry[]> {
-  try {
-    const { data, error } = await requireClient()
-      .from('profiles')
-      .select('id, username, stream, role, created_at')
-      .order('created_at', { ascending: false })
-      .limit(200);
-    if (error) throw error;
-    return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+  const mapRows = (rows: Record<string, unknown>[]): AdminProfileEntry[] =>
+    rows.map((r) => ({
       id: String(r.id ?? ''),
       username: (r.username as string | null) ?? null,
       stream: (r.stream as string | null) ?? null,
       role: r.role === 'admin' ? 'admin' : 'student',
       createdAt: (r.created_at as string | null) ?? null,
+      pushPermission: toPushPermission(r.push_permission),
     }));
+  try {
+    const { data, error } = await requireClient()
+      .from('profiles')
+      .select('id, username, stream, role, created_at, push_permission')
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    return mapRows((data ?? []) as Record<string, unknown>[]);
   } catch (err) {
+    // Pre-telemetry DBs lack push_permission — retry without it so the user
+    // list still loads (permission shows as "not asked" for everyone).
+    if (isMissingColumnError(err)) {
+      try {
+        const { data, error } = await requireClient()
+          .from('profiles')
+          .select('id, username, stream, role, created_at')
+          .order('created_at', { ascending: false })
+          .limit(200);
+        if (error) throw error;
+        return mapRows((data ?? []) as Record<string, unknown>[]);
+      } catch (retryErr) {
+        if (retryErr instanceof CloudError) throw retryErr;
+        throw friendlyError('Could not load user list.', retryErr);
+      }
+    }
     if (err instanceof CloudError) throw err;
     throw friendlyError('Could not load user list.', err);
+  }
+}
+
+/** Per-student push subscription summary for the Admin Panel health view.
+ *  Aggregated client-side from non-sensitive columns only — key material
+ *  (p256dh/auth) and endpoint URLs are never selected. */
+export interface PushDeviceSummary {
+  userId: string;
+  deviceCount: number;
+  latestAt: string | null;
+  userAgent: string | null;
+}
+
+/**
+ * Load every student's subscription presence. Only succeeds for admins (see
+ * the push_admin_read_all RLS policy); everyone else gets an RLS error.
+ */
+export async function fetchPushAdminOverview(): Promise<PushDeviceSummary[]> {
+  try {
+    const { data, error } = await requireClient()
+      .from('push_subscriptions')
+      .select('user_id, created_at, user_agent');
+    if (error) throw error;
+    const byUser = new Map<string, PushDeviceSummary>();
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      const uid = typeof r.user_id === 'string' ? r.user_id : String(r.user_id ?? '');
+      if (!uid) continue;
+      const cur = byUser.get(uid) ?? { userId: uid, deviceCount: 0, latestAt: null, userAgent: null };
+      cur.deviceCount += 1;
+      const created = typeof r.created_at === 'string' ? r.created_at : null;
+      if (created && (!cur.latestAt || created > cur.latestAt)) {
+        cur.latestAt = created;
+        cur.userAgent = typeof r.user_agent === 'string' ? r.user_agent : cur.userAgent;
+      }
+      byUser.set(uid, cur);
+    }
+    return [...byUser.values()];
+  } catch (err) {
+    if (err instanceof CloudError) throw err;
+    const { message } = describeError(err);
+    if (/permission denied|policy|not allowed|unauthorized/i.test(message)) {
+      throw new CloudError(
+        'Push overview is not available: your database needs the push-health update. Please run supabase/migration_add_push_health.sql in the Supabase SQL Editor first (it adds the admin read policy).'
+      );
+    }
+    throw friendlyError('Could not load push overview.', err);
   }
 }
 
@@ -379,6 +489,50 @@ export async function updateProfileGoals(
   } catch (err) {
     if (err instanceof CloudError) throw err;
     throw friendlyError('Could not save your goals.', err);
+  }
+}
+
+/** Save (or clear with null/'') the student's optional contact number.
+ *  Stored info only — never auth/OTP/verification. Own row only, never
+ *  touches role. Blank clears the field. */
+export async function updateProfileMobileNumber(userId: string, mobileNumber: string | null): Promise<void> {
+  const clean = toMobileNumber(mobileNumber);
+  try {
+    const { error } = await requireClient()
+      .from('profiles')
+      .update({ mobile_number: clean })
+      .eq('id', userId);
+    if (error) {
+      if (isMissingColumnError(error)) {
+        throw new CloudError(
+          'Mobile number could not be saved: your database needs the mobile-number update. Please run supabase/migration_add_mobile_number_to_profiles.sql in the Supabase SQL Editor first.'
+        );
+      }
+      throw error;
+    }
+  } catch (err) {
+    if (err instanceof CloudError) throw err;
+    throw friendlyError('Could not save your mobile number.', err);
+  }
+}
+
+/**
+ * Silently report this device's live browser notification permission to the
+ * student's own profile row (drives the Admin Panel health view). Background
+ * telemetry: NEVER throws — returns false when the column is missing
+ * (pre-migration DB), offline, or otherwise unsavable. Callers must not
+ * surface any UI for this.
+ */
+export async function updateProfilePushPermission(userId: string, permission: PushPermission): Promise<boolean> {
+  try {
+    const { error } = await requireClient()
+      .from('profiles')
+      .update({ push_permission: permission })
+      .eq('id', userId);
+    if (error) return false;
+    return true;
+  } catch {
+    return false;
   }
 }
 

@@ -203,5 +203,27 @@
   }
 }
 
+/*
+ * Prevent iOS Safari auto-zoom on form focus (<16px inputs trigger it).
+ * Desktop + larger text are untouched; labels and tiny captions keep
+ * their designed sizes — only tappable form fields are normalized.
+ */
+@media (max-width: 768px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Never allow accidental sideways page scroll from decorative/absolute layers */
+html, body {
+  overflow-x: clip;
+  max-width: 100%;
+}
+img, svg, video, canvas {
+  max-width: 100%;
+}
+
 
 

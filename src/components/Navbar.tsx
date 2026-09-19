@@ -3,8 +3,7 @@ import { ScreenId } from '../types';
 import { Logo } from './Logo';
 import {
   LayoutDashboard,
-  Calendar,
-  CheckSquare,
+  CalendarCheck2,
   BookOpen,
   BarChart3,
   Bell,
@@ -49,8 +48,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const navItems: { id: ScreenId; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'timetable', label: 'Timetable', icon: Calendar },
-    { id: 'daily', label: 'Daily Planner', icon: CheckSquare },
+    { id: 'planner', label: 'Planner', icon: CalendarCheck2 },
     { id: 'topics', label: 'Topics', icon: BookOpen },
     { id: 'progress', label: 'Progress', icon: BarChart3 },
     // Admin-only: rendered exclusively when the signed-in profile has role='admin'.
@@ -117,7 +115,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'bg-white/5 border-white/10 text-slate-400'
               }`}
               title={`Study Streak: ${currentStreak} days`}
-              onClick={() => onNavigate('daily')}
+              onClick={() => onNavigate('planner')}
             >
               <span className="text-sm leading-none">🔥</span>
               <span>{currentStreak}d</span>
@@ -173,7 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     onClick={() => setIsProfileMenuOpen(false)}
                     className="fixed inset-0 z-40 cursor-default bg-transparent"
                   />
-                  <div className="absolute right-0 mt-2 w-60 rounded-2xl border border-white/15 bg-[#161831] p-2 shadow-2xl z-50 animate-fadeIn text-xs">
+                  <div className="absolute right-0 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-2xl border border-white/15 bg-[#161831] p-2 shadow-2xl z-50 animate-fadeIn text-xs">
                     <div className="px-3 py-2.5 border-b border-white/10 mb-1">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         {username ? 'Signed in as' : 'Not signed in'}

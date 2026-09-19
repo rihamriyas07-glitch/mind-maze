@@ -313,13 +313,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md animate-fade-in p-2 sm:p-4 flex min-h-screen items-center justify-center"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md animate-fade-in p-2 sm:p-4 flex min-h-dvh items-center justify-center"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="relative w-full max-w-xl max-h-[92vh] sm:max-h-[88vh] rounded-3xl border border-white/15 bg-[#12142B] text-slate-100 shadow-[0_0_50px_rgba(107,78,255,0.25)] flex flex-col overflow-hidden m-auto"
+        className="relative w-full max-w-xl max-h-[calc(100dvh-1rem)] sm:max-h-[88vh] rounded-3xl border border-white/15 bg-[#12142B] text-slate-100 shadow-[0_0_50px_rgba(107,78,255,0.25)] flex flex-col overflow-hidden m-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Glow Header Accent */}

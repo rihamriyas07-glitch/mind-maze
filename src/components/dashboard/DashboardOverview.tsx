@@ -17,10 +17,9 @@ import {
   Plus,
   Trophy,
   Volume2,
-  Zap,
   RefreshCw,
 } from 'lucide-react';
-import { getTodayDateString, getTodayDayOfWeek, getFormattedDateDisplay } from '../../lib/storage';
+import { getTodayDateString, getTodayDayOfWeek } from '../../lib/storage';
 import { getSubjectsForStream } from '../../data/alSyllabusData';
 import { playStudyChime } from '../../lib/notificationService';
 import { BrowserReenableSteps } from '../notifications/BrowserReenableSteps';
@@ -65,8 +64,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   revisionCount = 0,
   notificationPermission,
   onRequestNotificationPermission,
-  onTestSmartReminder,
-  onTestNudge,
   onNavigate,
   onToggleTask,
   username,
@@ -239,64 +236,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       )}
 
-      {/* Smart & Contextual Notifications Active Banner */}
-      {notificationPermission === 'granted' && (
-        <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-r from-[#1B1736] via-[#161933] to-[#121E38] p-3.5 sm:p-4 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300 shrink-0">
-              <Bell className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="text-xs sm:text-sm font-bold text-purple-200">
-                  Motivational & Smart Reminders Active
-                </h4>
-                <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30 font-semibold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  Live Sync
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Contextual alerts cheer on your last topic, protect your 🔥 {streakData.currentStreak}-day streak, and gently nudge before 10 PM.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 justify-start sm:justify-end shrink-0">
-            {onTestSmartReminder && (
-              <button
-                onClick={onTestSmartReminder}
-                id="btn-test-smart-reminder"
-                title="Simulate a smart contextual study notification"
-                className="px-3 py-2 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-400/40 text-xs font-bold text-purple-200 transition cursor-pointer flex items-center gap-1.5 min-h-[40px]"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-                <span>Test Smart Alert</span>
-              </button>
-            )}
-            {onTestNudge && (
-              <button
-                onClick={onTestNudge}
-                id="btn-test-nudge-reminder"
-                title="Simulate a gentle progress nudge"
-                className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-xs font-bold text-amber-200 transition cursor-pointer flex items-center gap-1.5 min-h-[40px]"
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-300" />
-                <span>Test Nudge</span>
-              </button>
-            )}
-            <button
-              onClick={() => playStudyChime()}
-              title="Test audio chime"
-              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-cyan-300 transition cursor-pointer flex items-center gap-1.5 min-h-[40px]"
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              <span>Chime</span>
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* PWA Install Promotion Card */}
       <PWAInstallButton variant="card" />
 
@@ -314,66 +253,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     : 'Physical Science Stream'}
                 </span>
               </div>
-
-              {/* Streak Badge */}
-              <div
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide border transition-all ${
-                  streakData.currentStreak > 0
-                    ? 'bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-red-500/15 border-amber-500/40 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.25)]'
-                    : 'bg-white/5 border-white/10 text-slate-400'
-                }`}
-                title={
-                  streakData.isCompletedToday
-                    ? `Completed today! Current streak: ${streakData.currentStreak} days (Best: ${streakData.bestStreak})`
-                    : streakData.currentStreak > 0
-                    ? `Active streak: ${streakData.currentStreak} days! Complete 1 study task today to extend it.`
-                    : 'Complete a planned study task today to start your streak!'
-                }
-              >
-                <Flame
-                  className={`w-3.5 h-3.5 ${
-                    streakData.currentStreak > 0 ? 'text-amber-400 fill-amber-400 animate-pulse' : 'text-slate-500'
-                  }`}
-                />
-                <span>🔥 {streakData.currentStreak} day streak</span>
-                {streakData.isCompletedToday ? (
-                  <span className="text-[10px] bg-emerald-500/25 text-emerald-300 px-1.5 py-0.5 rounded-full font-bold border border-emerald-500/30">
-                    Done Today ✓
-                  </span>
-                ) : (
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full font-semibold border border-amber-500/30">
-                    1 Task To Extend
-                  </span>
-                )}
-              </div>
-
-              {/* Revision habit badge (separate additive stat) */}
-              <div
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide border transition-all ${
-                  revisionCount > 0
-                    ? 'bg-teal-500/15 border-teal-400/40 text-teal-200 shadow-[0_0_15px_rgba(45,212,191,0.25)]'
-                    : 'bg-white/5 border-white/10 text-slate-400'
-                }`}
-                title="Revision sessions completed — additive bonus only. Revising never changes syllabus % and never penalizes you."
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${revisionCount > 0 ? 'text-teal-300' : 'text-slate-500'}`} />
-                <span>🔁 {revisionCount} revision{revisionCount === 1 ? '' : 's'} done</span>
-                {revisionCount > 0 && (
-                  <span className="text-[10px] bg-teal-500/25 text-teal-200 px-1.5 py-0.5 rounded-full font-bold border border-teal-500/30">
-                    Great habit ✓
-                  </span>
-                )}
-              </div>
-
-              {/* Physical Science 3rd subject indicator (read-only; change in Settings) */}
-              {(stream === 'Physical Science' || (stream as string) === 'Maths') && (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 border border-white/15 text-xs">
-                  <span className="text-[10px] text-slate-300 font-semibold">3rd Subject:</span>
-                  <span className="px-2 py-0.5 rounded-md text-[11px] font-bold text-slate-200">
-                    {physicalScienceElective === 'ICT' ? '💻 ICT' : '🧪 Chemistry'}
-                  </span>
-                </div>
-              )}
             </div>
 
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
@@ -385,22 +264,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 'Ready for daily revision today?'
               )}
             </h1>
-
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Subjects:{' '}
-              <span className="text-cyan-300 font-semibold">
-                {streamSubjectMetas.map((s) => s.name).join(' • ')}
-              </span>
-              . Today is <strong className="text-white">{todayDayOfWeek}</strong> ({getFormattedDateDisplay(todayStr)}). You have{' '}
-              <strong className="text-cyan-300">{todayBlocks.length} study blocks</strong> planned totaling{' '}
-              <strong className="text-cyan-300">{todayHoursFormatted} hours</strong>.
-            </p>
           </div>
 
           {/* Quick Navigation Action Cards */}
           <div className="flex flex-wrap items-center gap-2.5">
             <button
-              onClick={() => onNavigate('timetable')}
+              onClick={() => onNavigate('planner')}
               className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-xs font-bold transition shadow-[0_0_20px_rgba(107,78,255,0.4)] hover:scale-105 active:scale-95 cursor-pointer min-h-[48px]"
             >
               <Calendar className="w-4 h-4" />
@@ -409,19 +278,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </button>
 
             <button
-              onClick={() => onNavigate('daily')}
+              onClick={() => onNavigate('planner')}
               className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white text-xs font-bold transition cursor-pointer min-h-[48px]"
             >
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
               <span>Daily Tasks</span>
-            </button>
-
-            <button
-              onClick={() => onNavigate('topics')}
-              className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white text-xs font-bold transition cursor-pointer min-h-[48px]"
-            >
-              <BookOpen className="w-4 h-4 text-cyan-400" />
-              <span>Syllabus Tracker</span>
             </button>
           </div>
         </div>
@@ -431,11 +292,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Metric 1: Today's Tasks */}
         <div
-          onClick={() => onNavigate('daily')}
+          onClick={() => onNavigate('planner')}
           className="rounded-2xl border border-white/10 bg-[#161831]/80 hover:border-emerald-400/40 p-4 sm:p-5 backdrop-blur-md shadow-lg transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Daily Tasks Done</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate min-w-0">Daily Tasks Done</span>
             <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 group-hover:scale-110 transition">
               <CheckCircle2 className="w-4 h-4" />
             </div>
@@ -453,11 +314,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
         {/* Metric 2: Today's Study Hours */}
         <div
-          onClick={() => onNavigate('timetable')}
+          onClick={() => onNavigate('planner')}
           className="rounded-2xl border border-white/10 bg-[#161831]/80 hover:border-cyan-400/40 p-4 sm:p-5 backdrop-blur-md shadow-lg transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Today's Study Hours</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate min-w-0">Today's Study Hours</span>
             <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 group-hover:scale-110 transition">
               <Clock className="w-4 h-4" />
             </div>
@@ -477,7 +338,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           className="rounded-2xl border border-white/10 bg-[#161831]/80 hover:border-purple-400/40 p-4 sm:p-5 backdrop-blur-md shadow-lg transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Syllabus Covered</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate min-w-0">Syllabus Covered</span>
             <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 group-hover:scale-110 transition">
               <BookOpen className="w-4 h-4" />
             </div>
@@ -495,11 +356,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
         {/* Metric 4: Exam Readiness & Consistency */}
         <div
-          onClick={() => onNavigate('daily')}
+          onClick={() => onNavigate('planner')}
           className="rounded-2xl border border-white/10 bg-[#161831]/80 hover:border-amber-400/40 p-4 sm:p-5 backdrop-blur-md shadow-lg transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Study Streak</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate min-w-0">Study Streak</span>
             <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 group-hover:scale-110 transition">
               <Flame className="w-4 h-4 fill-amber-400/50" />
             </div>
@@ -540,7 +401,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         </div>
         <button
-          onClick={() => onNavigate('daily')}
+          onClick={() => onNavigate('planner')}
           className="px-3.5 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/40 text-xs font-bold text-teal-200 transition cursor-pointer shrink-0 min-h-[40px]"
         >
           Revise a completed topic
@@ -567,7 +428,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </div>
 
               <button
-                onClick={() => onNavigate('daily')}
+                onClick={() => onNavigate('planner')}
                 className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer min-h-[44px] px-2"
               >
                 <span>View All</span>
@@ -583,7 +444,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   Import scheduled study blocks from your timetable or add custom past paper goals.
                 </p>
                 <button
-                  onClick={() => onNavigate('daily')}
+                  onClick={() => onNavigate('planner')}
                   className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-xs font-bold transition cursor-pointer min-h-[40px]"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -617,6 +478,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         {task.blockType === 'revision' && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-500/15 text-teal-200 border border-teal-400/40 mr-2">
                             🔁 Revision
+                          </span>
+                        )}
+                        {task.blockType !== 'revision' && !task.topicId && (
+                          <span
+                            title="Ticking this done won't move syllabus % — link a syllabus topic in the Planner to count it."
+                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/40 mr-2"
+                          >
+                            Not linked
                           </span>
                         )}
                         <span
@@ -655,7 +524,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </div>
 
               <button
-                onClick={() => onNavigate('timetable')}
+                onClick={() => onNavigate('planner')}
                 className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer min-h-[44px] px-2"
               >
                 <span>Edit Routine</span>
@@ -667,7 +536,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <div className="p-6 rounded-2xl bg-white/5 border border-white/5 text-center text-slate-400">
                 <p className="text-xs font-semibold text-slate-300">No timetable blocks set for {todayDayOfWeek}.</p>
                 <button
-                  onClick={() => onNavigate('timetable')}
+                  onClick={() => onNavigate('planner')}
                   className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-xs font-bold transition cursor-pointer min-h-[40px]"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -804,17 +673,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 return (
                   <div
                     key={dayAbbr}
-                    className={`flex flex-col items-center p-2 rounded-xl border text-center ${
+                    className={`flex flex-col items-center p-1.5 sm:p-2 rounded-xl border text-center min-w-0 ${
                       isToday
                         ? 'border-cyan-400/50 bg-cyan-950/30'
                         : 'border-white/5 bg-white/5'
                     }`}
                   >
-                    <span className="text-[10px] font-semibold text-slate-400">{dayAbbr}</span>
+                    <span className="text-[10px] font-semibold text-slate-400 truncate">{dayAbbr}</span>
                     <span className={`text-sm font-black my-1 ${isToday ? 'text-cyan-300' : 'text-white'}`}>
                       {count}
                     </span>
-                    <span className="text-[9px] text-slate-500">blocks</span>
+                    <span className="hidden min-[420px]:block text-[9px] text-slate-500">blocks</span>
                   </div>
                 );
               })}

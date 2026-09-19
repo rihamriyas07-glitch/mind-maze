@@ -22,7 +22,7 @@ const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frid
 // Twice daily in Sri Lanka time (UTC+5:30): noon + 5pm. Cron ticks every
 // 15 min, so each window below is 15 min wide and deduped per day.
 const WHATSAPP_CHANNEL_URL = "https://whatsapp.com/channel/0029Vb8OnJGCRs1fpYosgU1z";
-const WHATSAPP_QUIZ_ICON = "https://mind-maze-mu.vercel.app/bell.jpeg";
+const WHATSAPP_QUIZ_ICON = "https://mind-maze-mu.vercel.app/bell.png";
 const SL_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 function toMinutes(t: string): number {

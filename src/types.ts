@@ -8,7 +8,7 @@ export type StreamType =
   | 'Maths'
   | 'Bio';
 
-export type ScreenId = 'dashboard' | 'timetable' | 'daily' | 'topics' | 'progress' | 'admin' | 'settings';
+export type ScreenId = 'dashboard' | 'planner' | 'timetable' | 'daily' | 'topics' | 'progress' | 'admin' | 'settings';
 
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
 
@@ -109,6 +109,8 @@ export interface UserSettings {
   targetExamDate: string; // Expected A/L date "YYYY-MM-DD", '' when unset
   targetZScore?: string;
   motivationNote: string; // Personal note echoed in reminders, '' when unset
+  /** Optional contact number (stored info only — never auth/OTP). '' = unset. */
+  mobileNumber?: string;
   reminderSoundEnabled: boolean;
   notificationsGranted: boolean;
   hasSeenNotificationPrompt: boolean;

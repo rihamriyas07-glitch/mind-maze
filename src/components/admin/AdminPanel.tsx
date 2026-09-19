@@ -5,10 +5,15 @@ import {
   RefreshCw,
   Users,
   Loader2,
+  Bell,
+  BellOff,
+  BellRing,
 } from 'lucide-react';
 import {
   fetchAllProfiles,
+  fetchPushAdminOverview,
   AdminProfileEntry,
+  PushDeviceSummary,
   UserRole,
   CloudError,
 } from '../../lib/cloudStore';
@@ -36,6 +41,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [users, setUsers] = useState<AdminProfileEntry[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
+  // Push health overview: per-student subscription presence. Loaded
+  // alongside the user list; fails independently (user list still shows).
+  const [pushOverview, setPushOverview] = useState<PushDeviceSummary[]>([]);
+  const [loadingPush, setLoadingPush] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
 
   const loadUsers = useCallback(async () => {
     setLoadingUsers(true);
@@ -53,11 +63,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   }, []);
 
+  const loadPushOverview = useCallback(async () => {
+    setLoadingPush(true);
+    setPushError(null);
+    try {
+      setPushOverview(await fetchPushAdminOverview());
+    } catch (err) {
+      setPushOverview([]);
+      setPushError(
+        err instanceof CloudError
+          ? err.userMessage
+          : 'Could not load push overview.'
+      );
+    } finally {
+      setLoadingPush(false);
+    }
+  }, []);
+
+  const refreshAll = useCallback(() => {
+    void loadUsers();
+    void loadPushOverview();
+  }, [loadUsers, loadPushOverview]);
+
   useEffect(() => {
     if (profileLoaded && isAdmin) {
       void loadUsers();
+      void loadPushOverview();
     }
-  }, [profileLoaded, isAdmin, loadUsers]);
+  }, [profileLoaded, isAdmin, loadUsers, loadPushOverview]);
 
   if (!profileLoaded) {
     return (
@@ -97,6 +130,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   }
 
   const adminCount = users.filter((u) => u.role === 'admin').length;
+
+  // ---- Push health aggregates ----
+  const students = users.filter((u) => u.role !== 'admin');
+  const pushByUser = new Map<string, PushDeviceSummary>(pushOverview.map((p) => [p.userId, p]));
+  const subscribedStudents = students.filter((u) => (pushByUser.get(u.id)?.deviceCount ?? 0) > 0);
+  const permGranted = students.filter((u) => u.pushPermission === 'granted').length;
+  const permDenied = students.filter((u) => u.pushPermission === 'denied').length;
+  const permUnsupported = students.filter((u) => u.pushPermission === 'unsupported').length;
+  // NULL (never reported) or 'default' = never granted: not asked yet / old client.
+  const permNotAsked = students.length - permGranted - permDenied - permUnsupported;
+
+  const permissionBadge = (perm: AdminProfileEntry['pushPermission']) => {
+    if (perm === 'granted')
+      return <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-400/40"><BellRing className="w-3 h-3" />Granted</span>;
+    if (perm === 'denied')
+      return <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border bg-rose-500/20 text-rose-300 border-rose-400/40"><BellOff className="w-3 h-3" />Blocked</span>;
+    if (perm === 'unsupported')
+      return <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border bg-white/5 text-slate-400 border-white/15"><BellOff className="w-3 h-3" />Unsupported</span>;
+    return <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border bg-amber-500/20 text-amber-300 border-amber-400/40"><Bell className="w-3 h-3" />Not asked</span>;
+  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-8">
@@ -138,6 +191,109 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </dl>
       </div>
 
+      {/* Push notification health */}
+      <div className="rounded-3xl border border-white/10 bg-[#161831]/80 backdrop-blur-xl p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-bold text-white flex items-center gap-2">
+            <BellRing className="w-4 h-4 text-emerald-400" />
+            <span>Push notification health</span>
+          </h2>
+          <button
+            onClick={refreshAll}
+            disabled={loadingUsers || loadingPush}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-200 transition cursor-pointer min-h-[44px] disabled:opacity-60"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${(loadingUsers || loadingPush) ? 'animate-spin' : ''}`} />
+            <span>{loadingUsers || loadingPush ? 'Loading…' : 'Refresh'}</span>
+          </button>
+        </div>
+
+        <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mb-4">
+          <div className="rounded-xl bg-black/30 border border-white/10 p-3">
+            <dt className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Students</dt>
+            <dd className="text-base font-black text-white mt-0.5">{students.length}</dd>
+          </div>
+          <div className="rounded-xl bg-black/30 border border-emerald-400/30 p-3">
+            <dt className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Subscribed</dt>
+            <dd className="text-base font-black text-emerald-300 mt-0.5">{subscribedStudents.length}</dd>
+          </div>
+          <div className="rounded-xl bg-black/30 border border-white/10 p-3">
+            <dt className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Permission granted</dt>
+            <dd className="text-base font-black text-white mt-0.5">{permGranted}</dd>
+          </div>
+          <div className="rounded-xl bg-black/30 border border-white/10 p-3">
+            <dt className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Blocked</dt>
+            <dd className="text-base font-black text-rose-300 mt-0.5">{permDenied}</dd>
+          </div>
+          <div className="rounded-xl bg-black/30 border border-white/10 p-3">
+            <dt className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Not asked yet</dt>
+            <dd className="text-base font-black text-amber-300 mt-0.5">{permNotAsked}</dd>
+          </div>
+          <div className="rounded-xl bg-black/30 border border-white/10 p-3">
+            <dt className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Unsupported</dt>
+            <dd className="text-base font-black text-slate-300 mt-0.5">{permUnsupported}</dd>
+          </div>
+        </dl>
+
+        {pushError && (
+          <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold mb-3">
+            {pushError}
+          </div>
+        )}
+
+        {!pushError && students.length === 0 && !loadingUsers && (
+          <p className="text-xs text-slate-400 text-center py-6">No student rows found.</p>
+        )}
+
+        {!pushError && students.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400 border-b border-white/10">
+                  <th className="py-2 pr-3 font-bold">Username</th>
+                  <th className="py-2 pr-3 font-bold">Permission</th>
+                  <th className="py-2 pr-3 font-bold">Push status</th>
+                  <th className="py-2 font-bold">Last active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((u) => {
+                  const push = pushByUser.get(u.id);
+                  const devices = push?.deviceCount ?? 0;
+                  return (
+                    <tr key={u.id} className="border-b border-white/5 hover:bg-white/[0.03]">
+                      <td className="py-2.5 pr-3 font-bold text-white">@{u.username ?? '—'}</td>
+                      <td className="py-2.5 pr-3">{permissionBadge(u.pushPermission)}</td>
+                      <td className="py-2.5 pr-3">
+                        {devices > 0 ? (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-400/40">
+                            ✓ Receiving{devices > 1 ? ` (${devices} devices)` : ''}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full border bg-white/5 text-slate-400 border-white/15">
+                            Not subscribed
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 text-slate-400">
+                        {push?.latestAt ? new Date(push.latestAt).toLocaleDateString() : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className="text-[11px] text-slate-500 mt-4 leading-relaxed">
+          Stale subscriptions heal automatically: each granted device re-verifies its subscription against the
+          current VAPID key on sign-in and recreates it when needed. &ldquo;Blocked&rdquo; students must re-enable
+          notifications in their browser site settings first — the app cannot resubscribe them. Permission and
+          subscription columns update as students open the app.
+        </p>
+      </div>
+
       {/* User list */}
       <div className="rounded-3xl border border-white/10 bg-[#161831]/80 backdrop-blur-xl p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
@@ -146,7 +302,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <span>All users ({users.length})</span>
           </h2>
           <button
-            onClick={() => void loadUsers()}
+            onClick={refreshAll}
             disabled={loadingUsers}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-200 transition cursor-pointer min-h-[44px] disabled:opacity-60"
           >

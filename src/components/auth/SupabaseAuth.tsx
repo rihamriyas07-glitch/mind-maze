@@ -6,6 +6,8 @@ import {
   pushTopics,
   validateUsernameFormat,
   toExamDate,
+  toMobileNumber,
+  isMobileNumberPlausible,
   CloudError,
 } from '../../lib/cloudStore';
 import { getUserSettings, saveUserSettings } from '../../lib/storage';
@@ -127,6 +129,9 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
   // Combined Goals step (also optional): Z-score target + motivation note.
   const [targetZScore, setTargetZScore] = useState('');
   const [motivationNote, setMotivationNote] = useState('');
+  // Optional contact number — stored info only, never auth/OTP/verification.
+  // Skippable: blank (or imperfect) input never blocks sign-up.
+  const [mobileNumber, setMobileNumber] = useState('');
 
   if (!supabase) {
     return (
@@ -186,6 +191,14 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
       if (targetZScore.trim()) patch.targetZScore = targetZScore.trim().slice(0, 20);
       if (motivationNote.trim()) patch.motivationNote = motivationNote.trim().slice(0, 500);
       if (Object.keys(patch).length > 0) saveUserSettings(patch);
+    } catch {}
+  };
+
+  /** Persist the optional contact number locally (profile row gets it too). */
+  const persistMobileChoice = () => {
+    try {
+      const clean = toMobileNumber(mobileNumber);
+      if (clean) saveUserSettings({ mobileNumber: clean });
     } catch {}
   };
 
@@ -256,10 +269,13 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
       persistStreamChoice();
       persistExamDateChoice();
       persistGoalsChoice();
+      persistMobileChoice();
       if (data.session) {
         try {
-          // Stream + elective + exam date + goals are part of sign-up and go
-          // to the Supabase profile row (also saved locally above).
+          // Stream + elective + exam date + goals + contact number are part
+          // of sign-up and go to the Supabase profile row (also saved
+          // locally above). Mobile is optional contact info only — never
+          // auth/OTP — and never blocks sign-up when blank or imperfect.
           await createProfile(
             user.id,
             username,
@@ -267,7 +283,8 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
             elective,
             toExamDate(examDate),
             targetZScore.trim() || null,
-            motivationNote.trim() || null
+            motivationNote.trim() || null,
+            toMobileNumber(mobileNumber)
           );
           // Seed already-completed topics so the Tracker starts accurately.
           // Non-fatal: sign-up still succeeds if this sync fails.
@@ -297,8 +314,8 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
       } else {
       // Fallback for when "Confirm email" is re-enabled: no session yet.
       // Keep the pending username + stream + elective + exam date + goals +
-      // completed topics so first login can claim them automatically on
-      // this device (see App loadCloudForUser).
+      // mobile number + completed topics so first login can claim them
+      // automatically on this device (see App loadCloudForUser).
       try {
         localStorage.setItem('mindmaze_pending_username', username.trim());
         localStorage.setItem('mindmaze_pending_stream', stream);
@@ -309,6 +326,8 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
         if (motivationNote.trim()) {
           localStorage.setItem('mindmaze_pending_note', motivationNote.trim().slice(0, 500));
         }
+        const cleanMobile = toMobileNumber(mobileNumber);
+        if (cleanMobile) localStorage.setItem('mindmaze_pending_mobile', cleanMobile);
         if (completedTopicIds.length > 0) {
           localStorage.setItem('mindmaze_pending_topics', JSON.stringify(completedTopicIds));
         }
@@ -428,7 +447,8 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
         elective,
         toExamDate(examDate),
         targetZScore.trim() || null,
-        motivationNote.trim() || null
+        motivationNote.trim() || null,
+        toMobileNumber(mobileNumber)
       );
       if (completedTopicIds.length > 0) {
         try {
@@ -444,11 +464,13 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
         localStorage.removeItem('mindmaze_pending_exam_date');
         localStorage.removeItem('mindmaze_pending_zscore');
         localStorage.removeItem('mindmaze_pending_note');
+        localStorage.removeItem('mindmaze_pending_mobile');
         localStorage.removeItem('mindmaze_pending_topics');
       } catch {}
       persistStreamChoice();
       persistExamDateChoice();
       persistGoalsChoice();
+      persistMobileChoice();
       setBusy(false);
       onAuthReady?.(username.trim());
     } catch (err) {
@@ -689,7 +711,9 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
     </div>
   );
 
-  // Combined Goals step (Z-score + motivation note) — one screen, skippable.
+  // Combined Goals step (Z-score + motivation note + optional contact
+  // number) — one screen, all skippable. Mobile is stored contact info
+  // only: never auth/OTP/verification, never blocks sign-up.
   const goalsStep = (
     <div className="space-y-3 pt-1">
       {stepBadge(4, 'Goals', true)}
@@ -721,6 +745,26 @@ export const SupabaseAuth: React.FC<SupabaseAuthProps> = ({ view, onViewChange, 
           className="w-full rounded-xl bg-white/5 border border-white/15 px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-colors"
         />
         <p className="text-[10px] text-slate-500 mt-1">Included in your daily countdown notification. Editable later in Settings.</p>
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+          Mobile Number <span className="text-slate-500 font-normal">(optional)</span>
+        </label>
+        <input
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          value={mobileNumber}
+          onChange={(e) => setMobileNumber(e.target.value)}
+          placeholder="e.g. +94 77 123 4567 — skip if you prefer"
+          maxLength={30}
+          className="w-full rounded-xl bg-white/5 border border-white/15 px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-colors"
+        />
+        {mobileNumber.trim() && !isMobileNumberPlausible(mobileNumber) ? (
+          <p className="text-[10px] text-amber-300/80 mt-1">That doesn&apos;t look like a usual mobile number — you can still continue, it won&apos;t block sign-up.</p>
+        ) : (
+          <p className="text-[10px] text-slate-500 mt-1">Stored as contact info only — no verification codes, no login use. Editable later in Settings.</p>
+        )}
       </div>
     </div>
   );

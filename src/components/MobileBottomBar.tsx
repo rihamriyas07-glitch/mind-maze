@@ -2,8 +2,7 @@ import React from 'react';
 import { ScreenId } from '../types';
 import {
   LayoutDashboard,
-  Calendar,
-  CheckSquare,
+  CalendarCheck2,
   BookOpen,
   BarChart3,
 } from 'lucide-react';
@@ -21,8 +20,7 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({
 }) => {
   const tabs: { id: ScreenId; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-    { id: 'timetable', label: 'Timetable', icon: Calendar },
-    { id: 'daily', label: 'Daily', icon: CheckSquare },
+    { id: 'planner', label: 'Planner', icon: CalendarCheck2 },
     { id: 'topics', label: 'Topics', icon: BookOpen },
     { id: 'progress', label: 'Progress', icon: BarChart3 },
   ];
@@ -48,8 +46,8 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({
             >
               <div className="relative">
                 <Icon className={`w-5 h-5 transition-transform ${isActive ? 'scale-110 text-cyan-300' : ''}`} />
-                {tab.id === 'daily' && pendingDailyTasksCount > 0 && (
-                  <span className="absolute -top-1 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#6B4EFF] px-1 text-[9px] font-bold text-white shadow-sm">
+                {tab.id === 'planner' && pendingDailyTasksCount > 0 && (
+                  <span className="absolute -top-1 -right-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#6B4EFF] px-1 text-[10px] font-bold text-white shadow-sm">
                     {pendingDailyTasksCount}
                   </span>
                 )}
@@ -62,7 +60,7 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({
                 {tab.label}
               </span>
               {isActive && (
-                <div className="absolute -bottom-1 h-0.5 w-6 rounded-full bg-gradient-to-r from-[#6B4EFF] to-cyan-400 shadow-[0_0_8px_rgba(0,245,255,0.8)]" />
+                <div className="absolute bottom-0.5 h-0.5 w-6 rounded-full bg-gradient-to-r from-[#6B4EFF] to-cyan-400 shadow-[0_0_8px_rgba(0,245,255,0.8)]" />
               )}
             </button>
           );

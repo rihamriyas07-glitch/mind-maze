@@ -16,7 +16,7 @@ export const IOSInstallBanner: React.FC = () => {
       {/* Floating Dismissible iOS Install Banner */}
       <div
         id="ios-pwa-install-banner"
-        className="fixed bottom-16 md:bottom-6 left-3 right-3 sm:left-auto sm:right-6 sm:max-w-md z-40 rounded-2xl border border-purple-400/40 bg-[#161831]/95 p-4 shadow-2xl backdrop-blur-xl animate-fadeIn"
+        className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:bottom-6 left-3 right-3 sm:left-auto sm:right-6 sm:max-w-md z-50 rounded-2xl border border-purple-400/40 bg-[#161831]/95 p-4 shadow-2xl backdrop-blur-xl animate-fadeIn"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
@@ -40,7 +40,7 @@ export const IOSInstallBanner: React.FC = () => {
             onClick={dismissIOSBanner}
             id="btn-dismiss-ios-banner"
             aria-label="Dismiss iOS install banner"
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer shrink-0"
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
             title="Dismiss for 7 days"
           >
             <X className="w-4 h-4" />

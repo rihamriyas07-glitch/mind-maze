@@ -16,6 +16,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   // sets one at sign-up or in Settings (the goals strip hides when unset).
   targetZScore: '',
   motivationNote: '',
+  // Optional contact number (stored info only — never auth/OTP).
+  mobileNumber: '',
   reminderSoundEnabled: true,
   notificationsGranted: false,
   hasSeenNotificationPrompt: false,
@@ -361,6 +363,14 @@ export function computeEndTime(startTime: string, durationMinutes: number = 90):
   } catch {
     return '18:00';
   }
+}
+
+/**
+ * Formats minutes since midnight as "HH:MM" (24-hour), wrapping past midnight.
+ */
+export function minutesToHHMM(totalMinutes: number): string {
+  const wrapped = ((Math.round(totalMinutes) % (24 * 60)) + 24 * 60) % (24 * 60);
+  return `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`;
 }
 
 /**

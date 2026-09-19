@@ -22,6 +22,13 @@ create table if not exists public.profiles (
   al_exam_date text,
   target_z_score text,
   motivation_note text,
+  -- Optional contact number. Stored contact info ONLY — never used for
+  -- authentication, OTP, or verification. Nullable, no format constraint.
+  mobile_number text,
+  -- Last browser notification permission reported by the student's device
+  -- ('granted' | 'denied' | 'default' | 'unsupported', NULL = never
+  -- reported). Telemetry for the Admin Panel health view only.
+  push_permission text,
   revision_count int not null default 0,
   created_at timestamptz not null default now(),
   constraint username_length check (char_length(username) between 3 and 30),
@@ -49,6 +56,12 @@ alter table public.profiles
 
 alter table public.profiles
   add column if not exists motivation_note text;
+
+alter table public.profiles
+  add column if not exists mobile_number text;
+
+alter table public.profiles
+  add column if not exists push_permission text;
 
 -- Allowed values for role (idempotent: only added when missing).
 do $$

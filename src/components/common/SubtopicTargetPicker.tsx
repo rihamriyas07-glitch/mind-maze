@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { BookOpen, Plus, X } from 'lucide-react';
 import { SubtopicTarget, SyllabusTopic } from '../../types';
 import { getSubtopicProgressValue } from '../../lib/syllabusProgression';
+import { getCombinedMathsGroup } from '../../data/alSyllabusData';
 
 interface SubtopicTargetPickerProps {
   syllabusTopics: SyllabusTopic[];
@@ -12,6 +13,12 @@ interface SubtopicTargetPickerProps {
   onTargetsChange: (targets: SubtopicTarget[]) => void;
   /** When true, only topics with status 'completed' are offered (Revision mode). */
   completedOnly?: boolean;
+  /**
+   * When true, completed topics are hidden (Study mode — first-time learning
+   * only). The currently selected topic stays visible so editing an older
+   * block never orphans its link.
+   */
+  excludeCompleted?: boolean;
 }
 
 function shortLabel(raw: string): string {
@@ -32,13 +39,17 @@ export const SubtopicTargetPicker: React.FC<SubtopicTargetPickerProps> = ({
   targets,
   onTargetsChange,
   completedOnly = false,
+  excludeCompleted = false,
 }) => {
   const subjectTopics = useMemo(
     () =>
       syllabusTopics.filter(
-        (t) => t.subject === subject && (!completedOnly || t.status === 'completed')
+        (t) =>
+          t.subject === subject &&
+          (!completedOnly || t.status === 'completed') &&
+          (!excludeCompleted || t.status !== 'completed' || t.id === topicId)
       ),
-    [syllabusTopics, subject, completedOnly]
+    [syllabusTopics, subject, completedOnly, excludeCompleted, topicId]
   );
 
   const currentTopic = useMemo(
@@ -126,14 +137,18 @@ export const SubtopicTargetPicker: React.FC<SubtopicTargetPickerProps> = ({
         className="w-full rounded-xl bg-[#161831] border border-cyan-500/30 px-3 py-2 text-white font-medium focus:border-cyan-400 focus:outline-none text-xs"
       >
         <option value="">-- No specific topic linked --</option>
-        {subjectTopics.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.unitNumber ? `Unit ${t.unitNumber}: ` : ''}
-            {t.unitTitle && t.unitTitle.trim().toLowerCase() !== t.topicTitle.trim().toLowerCase()
-              ? `${t.unitTitle} – ${t.topicTitle}`
-              : t.topicTitle}
-          </option>
-        ))}
+        {subjectTopics.map((t) => {
+          const mathsGroup = getCombinedMathsGroup(t);
+          return (
+            <option key={t.id} value={t.id}>
+              {t.unitNumber ? `Unit ${t.unitNumber}: ` : ''}
+              {t.unitTitle && t.unitTitle.trim().toLowerCase() !== t.topicTitle.trim().toLowerCase()
+                ? `${t.unitTitle} – ${t.topicTitle}`
+                : t.topicTitle}
+              {mathsGroup === 'Pure Mathematics' ? ' · Pure' : mathsGroup === 'Applied Mathematics' ? ' · Applied' : ''}
+            </option>
+          );
+        })}
       </select>
 
       {!currentTopic && (

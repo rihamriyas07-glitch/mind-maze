@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, ShieldCheck, CheckCircle2, X, Sparkles, Volume2 } from 'lucide-react';
-import { requestBrowserNotificationPermission, sendStudyNotification, subscribeForPush } from '../../lib/notificationService';
+import { requestBrowserNotificationPermission, sendStudyNotification, ensureHealthyPushSubscription } from '../../lib/notificationService';
 
 interface NotificationPermissionModalProps {
   isOpen: boolean;
@@ -20,9 +20,10 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
     const perm = await requestBrowserNotificationPermission();
     onPermissionUpdated(perm);
     if (perm === 'granted') {
-      // Register for closed-app Web Push (free, VAPID). No-op if the
-      // public key isn't configured yet — local reminders still work.
-      void subscribeForPush().catch(() => undefined);
+      // Register for closed-app Web Push (free, VAPID). The health check
+      // heals any stale subscription and reports permission state; no-op
+      // if the public key isn't configured yet — local reminders still work.
+      void ensureHealthyPushSubscription({ force: true }).catch(() => undefined);
       sendStudyNotification(
         '🔔 Mind Maze Notifications Enabled!',
         'You will now receive timely reminders before your GCE A/L timetable study sessions.'
@@ -116,7 +117,7 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
 
           <button
             onClick={onClose}
-            className="w-full py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition cursor-pointer min-h-[38px] flex items-center justify-center"
+            className="w-full py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition cursor-pointer min-h-[44px] flex items-center justify-center"
           >
             Maybe Later
           </button>

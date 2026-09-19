@@ -536,7 +536,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   </button>
                 </div>
 
-                <span className="text-xs text-cyan-300 font-semibold bg-cyan-400/10 px-3 py-1.5 rounded-xl border border-cyan-400/20 whitespace-nowrap">
+                <span className="text-xs text-cyan-300 font-semibold bg-cyan-400/10 px-3 py-1.5 rounded-xl border border-cyan-400/20 whitespace-nowrap max-w-full overflow-hidden text-ellipsis">
                   {todaySlots.filter((s) => s.isCompleted).length} of {todaySlots.length} Done
                 </span>
               </div>

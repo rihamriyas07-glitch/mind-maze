@@ -51,7 +51,7 @@ export const ComingSoonModal: React.FC<ComingSoonModalProps> = ({
     >
       <div
         id="coming-soon-modal-content"
-        className="relative w-full max-w-lg rounded-3xl border border-purple-500/30 bg-gradient-to-b from-[#181938] via-[#12142B] to-[#0D0E21] p-6 sm:p-8 text-white shadow-2xl shadow-purple-900/50 backdrop-blur-2xl"
+        className="relative w-full max-w-lg rounded-3xl border border-purple-500/30 bg-gradient-to-b from-[#181938] via-[#12142B] to-[#0D0E21] p-6 sm:p-8 text-white shadow-2xl shadow-purple-900/50 backdrop-blur-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Glowing Background Orbs */}

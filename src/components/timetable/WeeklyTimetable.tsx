@@ -938,7 +938,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
               </div>
 
               {/* Submit / Cancel Buttons in Pinned Sticky Footer */}
-              <div className="p-3.5 sm:p-4 border-t border-white/10 bg-[#14162e]/95 backdrop-blur-md flex items-center justify-end gap-2.5 shrink-0">
+              <div className="p-3.5 sm:p-4 border-t border-white/10 bg-[#14162e]/95 backdrop-blur-md flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 shrink-0 [&>button]:w-full [&>button]:sm:w-auto">
                 {editingEntry && (
                   <button
                     type="button"
@@ -948,7 +948,7 @@ export const WeeklyTimetable: React.FC<WeeklyTimetableProps> = ({
                         setIsModalOpen(false);
                       }
                     }}
-                    className="mr-auto px-4 py-2 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-semibold transition cursor-pointer min-h-[44px] flex items-center gap-1.5"
+                    className="sm:mr-auto px-4 py-2 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-semibold transition cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Delete</span>

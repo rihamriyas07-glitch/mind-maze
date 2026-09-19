@@ -331,7 +331,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
       <div className="flex items-center gap-2 border-b border-white/10 pb-3">
         <button
           onClick={() => setTaskFilter('all')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[38px] ${
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[44px] ${
             taskFilter === 'all'
               ? 'bg-[#6B4EFF] text-white shadow-sm'
               : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -341,7 +341,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
         </button>
         <button
           onClick={() => setTaskFilter('pending')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[38px] ${
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[44px] ${
             taskFilter === 'pending'
               ? 'bg-[#6B4EFF] text-white shadow-sm'
               : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -351,7 +351,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
         </button>
         <button
           onClick={() => setTaskFilter('completed')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[38px] ${
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer min-h-[44px] ${
             taskFilter === 'completed'
               ? 'bg-[#6B4EFF] text-white shadow-sm'
               : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -707,7 +707,7 @@ export const DailyStudyPlanner: React.FC<DailyStudyPlannerProps> = ({
               </div>
 
               {/* Pinned Sticky Footer Action Buttons */}
-              <div className="p-3.5 sm:p-4 border-t border-white/10 bg-[#14162e]/95 backdrop-blur-md flex items-center justify-end gap-2.5 shrink-0">
+              <div className="p-3.5 sm:p-4 border-t border-white/10 bg-[#14162e]/95 backdrop-blur-md flex flex-wrap items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsAddTaskModalOpen(false)}

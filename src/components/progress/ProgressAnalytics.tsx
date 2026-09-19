@@ -100,11 +100,36 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
     return 60;
   };
 
+  // Paging bounds: earliest week with any logged task → current week.
+  // Prev stops at the first week the user worked; Next stops at this week.
+  const minWeekOffset = useMemo(() => {
+    if (dailyTasks.length === 0) return 0;
+    try {
+      const dates = dailyTasks.map((t) => t.date).filter(Boolean).sort();
+      const [y, m, d] = dates[0].split('-').map(Number);
+      const first = new Date(y, m - 1, d);
+      if (Number.isNaN(first.getTime())) return 0;
+      const toMonday = (dt: Date) => {
+        const mm = new Date(dt);
+        mm.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
+        mm.setHours(0, 0, 0, 0);
+        return mm;
+      };
+      const diffWeeks = Math.round(
+        (toMonday(new Date()).getTime() - toMonday(first).getTime()) / (7 * 24 * 60 * 60 * 1000)
+      );
+      return -Math.max(0, diffWeeks);
+    } catch {
+      return 0;
+    }
+  }, [dailyTasks]);
+  const clampedWeekOffset = Math.max(minWeekOffset, Math.min(0, weekOffset));
+
   const weekData = useMemo(() => {
     const now = new Date();
     const monday = new Date(now);
     const dayIdx = (now.getDay() + 6) % 7;
-    monday.setDate(now.getDate() - dayIdx + weekOffset * 7);
+    monday.setDate(now.getDate() - dayIdx + clampedWeekOffset * 7);
     monday.setHours(0, 0, 0, 0);
 
     const days = Array.from({ length: 7 }, (_, i) => {
@@ -153,7 +178,7 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
     const weekDone = Math.round(perDay.reduce((s, d) => s + d.doneHours, 0) * 10) / 10;
     const startLabel = days[0].date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const endLabel = days[6].date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const weekLabel = weekOffset === 0 ? 'This Week' : weekOffset === -1 ? 'Last Week' : `${startLabel} – ${endLabel}`;
+    const weekLabel = clampedWeekOffset === 0 ? 'This Week' : clampedWeekOffset === -1 ? 'Last Week' : `${startLabel} – ${endLabel}`;
     const maxHrs = Math.max(dailyGoal, ...perDay.map((d) => d.totalHours), 1);
     const todayStr = (() => {
       const n = new Date();
@@ -161,19 +186,50 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
     })();
 
     return { days: perDay, weekTotal, weekDone, weekLabel, rangeLabel: `${startLabel} – ${endLabel}`, maxHrs, todayStr };
-  }, [dailyTasks, dailyGoal, weekOffset, timetableEntries]);
+  }, [dailyTasks, dailyGoal, clampedWeekOffset, timetableEntries]);
 
-  // Weekly comparison: last 8 weeks collapse 7 daily bars into 1 bar per week.
+  // Weekly comparison: every week from the user's first logged week through the
+  // latest week (current week, or furthest planned-task week if ahead of it).
   const weeklyHistory = useMemo(() => {
+    const toMonday = (d: Date) => {
+      const m = new Date(d);
+      m.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      m.setHours(0, 0, 0, 0);
+      return m;
+    };
+    const parseDateStr = (s: string) => {
+      const [y, mo, da] = s.split('-').map(Number);
+      return new Date(y, mo - 1, da);
+    };
     const now = new Date();
-    const thisMonday = new Date(now);
-    thisMonday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-    thisMonday.setHours(0, 0, 0, 0);
+    const thisMonday = toMonday(now);
 
-    const weeks = Array.from({ length: 8 }, (_, wIdx) => {
-      // wIdx 0 = 7 weeks ago, wIdx 7 = this week
-      const monday2 = new Date(thisMonday);
-      monday2.setDate(thisMonday.getDate() - (7 - wIdx) * 7);
+    // Default window: last 8 weeks (as before) so short histories still show
+    // empty runway weeks. Extends back to the first logged week when older.
+    let startMonday = new Date(thisMonday);
+    startMonday.setDate(thisMonday.getDate() - 7 * 7);
+    let endMonday = thisMonday;
+    if (dailyTasks.length > 0) {
+      const dates = dailyTasks.map((t) => t.date).filter(Boolean).sort();
+      const first = parseDateStr(dates[0]);
+      const last = parseDateStr(dates[dates.length - 1]);
+      if (!Number.isNaN(first.getTime())) {
+        const firstMonday = toMonday(first);
+        if (firstMonday.getTime() < startMonday.getTime()) startMonday = firstMonday;
+      }
+      if (!Number.isNaN(last.getTime())) {
+        const lastMonday = toMonday(last);
+        if (lastMonday.getTime() > endMonday.getTime()) endMonday = lastMonday;
+      }
+      if (startMonday.getTime() > endMonday.getTime()) startMonday = endMonday;
+    }
+
+    const weekCount =
+      Math.round((endMonday.getTime() - startMonday.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+
+    const weeks = Array.from({ length: weekCount }, (_, wIdx) => {
+      const monday2 = new Date(startMonday);
+      monday2.setDate(startMonday.getDate() + wIdx * 7);
       const days: string[] = Array.from({ length: 7 }, (_, d) => {
         const dt = new Date(monday2);
         dt.setDate(monday2.getDate() + d);
@@ -186,13 +242,15 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
       const endD = new Date(monday2);
       endD.setDate(monday2.getDate() + 6);
       const endL = endD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const isCurrent = monday2.getTime() === thisMonday.getTime();
+      const isLast = monday2.getTime() === thisMonday.getTime() - 7 * 24 * 60 * 60 * 1000;
       return {
         key: days[0],
-        label: wIdx === 7 ? 'This wk' : wIdx === 6 ? 'Last wk' : `${startL}`,
+        label: isCurrent ? 'This wk' : isLast ? 'Last wk' : `${startL}`,
         subLabel: `${startL}–${endL}`,
         totalHours: Math.round((totalMins / 60) * 10) / 10,
         doneHours: Math.round((doneMins / 60) * 10) / 10,
-        isCurrent: wIdx === 7,
+        isCurrent,
       };
     });
     const maxWk = Math.max(weeklyGoal, ...weeks.map((w) => w.totalHours), 1);
@@ -493,41 +551,64 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
                 <span>{targetProgress > 0.5 ? 'Weekly Total — 7 Days Joined' : 'This Week — 7 Daily Bars'}</span>
               </h3>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {minWeekOffset < 0 && (
+                  <button
+                    onClick={() => {
+                      setWeekOffset(minWeekOffset);
+                      setShowWeeklyComparison(false);
+                    }}
+                    disabled={clampedWeekOffset <= minWeekOffset}
+                    title="Jump to your first week"
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition min-h-[44px] ${
+                      clampedWeekOffset <= minWeekOffset
+                        ? 'bg-white/[0.02] border-white/5 text-slate-600 cursor-not-allowed'
+                        : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white cursor-pointer'
+                    }`}
+                  >
+                    ⏮ First
+                  </button>
+                )}
                 <button
                   onClick={() => {
-                    setWeekOffset((v) => v - 1);
+                    setWeekOffset((v) => Math.max(minWeekOffset, v - 1));
                     setShowWeeklyComparison(false);
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer min-h-[36px]"
+                  disabled={clampedWeekOffset <= minWeekOffset}
+                  title={clampedWeekOffset <= minWeekOffset ? 'This is your first week' : 'Previous week'}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition min-h-[44px] ${
+                    clampedWeekOffset <= minWeekOffset
+                      ? 'bg-white/[0.02] border-white/5 text-slate-600 cursor-not-allowed'
+                      : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white cursor-pointer'
+                  }`}
                 >
                   ← Prev
                 </button>
-                <span className="text-[11px] font-bold text-white px-2 min-w-[110px] text-center">
+                <span className="text-[11px] font-bold text-white px-2 min-w-0 flex-1 sm:flex-none sm:min-w-[110px] text-center truncate">
                   {weekData.weekLabel}
-                  <span className="block text-[10px] font-medium text-slate-400">{weekData.rangeLabel}</span>
+                  <span className="block text-[10px] font-medium text-slate-400 truncate">{weekData.rangeLabel}</span>
                 </span>
                     <button
                       onClick={() => {
                         setWeekOffset((v) => Math.min(0, v + 1));
                         setShowWeeklyComparison(false);
                       }}
-                  disabled={weekOffset >= 0}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition min-h-[36px] ${
-                    weekOffset >= 0
+                  disabled={clampedWeekOffset >= 0}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition min-h-[44px] ${
+                    clampedWeekOffset >= 0
                       ? 'bg-white/[0.02] border-white/5 text-slate-600 cursor-not-allowed'
                       : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white cursor-pointer'
                   }`}
                 >
                   Next →
                 </button>
-                {weekOffset !== 0 && (
+                {clampedWeekOffset !== 0 && (
                       <button
                         onClick={() => {
                           setWeekOffset(0);
                           setShowWeeklyComparison(false);
                         }}
-                    className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-200 text-xs font-bold transition cursor-pointer min-h-[36px]"
+                    className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-200 text-xs font-bold transition cursor-pointer min-h-[44px]"
                   >
                     Today
                   </button>
@@ -539,7 +620,7 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
                     setDragProgress(toWeekly ? 1 : 0);
                     setWeekScrolled(toWeekly);
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-[#6B4EFF]/20 hover:bg-[#6B4EFF]/30 border border-[#6B4EFF]/50 text-purple-200 text-xs font-bold transition cursor-pointer min-h-[36px]"
+                  className="px-3 py-1.5 rounded-lg bg-[#6B4EFF]/20 hover:bg-[#6B4EFF]/30 border border-[#6B4EFF]/50 text-purple-200 text-xs font-bold transition cursor-pointer min-h-[44px]"
                 >
                   {targetProgress < 0.5 ? 'Join into 1 →' : '← Split to 7'}
                 </button>
@@ -562,7 +643,7 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
               {/* Morph stage: drag left and the 7 daily bars join one-by-one into one bigger weekly bar.
                   progress 0 = 7 separate daily bars, 1 = single weekly bar. */}
               <div className="relative w-full h-52 pt-2">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 text-[10px] font-bold text-slate-400 whitespace-nowrap">
+                <div className="absolute top-0 inset-x-0 text-center text-[10px] font-bold text-slate-400 truncate px-2">
                   {targetProgress < 0.05
                     ? '7 daily bars — drag left to join them'
                     : targetProgress > 0.95
@@ -573,7 +654,9 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
                 {weekData.days.map((day, i) => {
                   const pctTotal = Math.min(100, Math.round((day.totalHours / weekData.maxHrs) * 100));
                   const pctDone = day.totalHours > 0 ? Math.round((day.doneHours / day.totalHours) * 100) : 0;
-                  const metGoal = day.totalHours >= dailyGoal && day.totalHours > 0;
+                  // Done-hours vs daily goal: below → red, exactly met → yellow, above → green.
+                  const goalState =
+                    day.doneHours > dailyGoal ? 'above' : day.doneHours >= dailyGoal ? 'met' : 'below';
                   const isToday = day.dateStr === weekData.todayStr;
                   // One-by-one join: bar i merges during progress window [i/7,(i+1)/7]
                   const rawLocal = Math.max(0, Math.min(1, targetProgress * 7 - i));
@@ -622,7 +705,13 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
                           )}
                           {day.doneHours > 0 && (
                             <div
-                              className={`w-full ${metGoal ? 'bg-gradient-to-t from-emerald-500 to-emerald-300' : 'bg-gradient-to-t from-cyan-500 to-cyan-300'}`}
+                              className={`w-full ${
+                                goalState === 'above'
+                                  ? 'bg-gradient-to-t from-emerald-600 to-emerald-300'
+                                  : goalState === 'met'
+                                    ? 'bg-gradient-to-t from-amber-500 to-yellow-300'
+                                    : 'bg-gradient-to-t from-rose-600 to-rose-400'
+                              }`}
                               style={{ height: `${Math.max(8, (pctTotal * pctDone) / 100)}%` }}
                             />
                           )}
@@ -666,11 +755,19 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
 
             <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-white/5 text-[10px] text-slate-400">
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400 inline-block" />
-                Completed
+                <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" />
+                Below daily goal
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" />
+                <span className="w-2.5 h-2.5 rounded-sm bg-yellow-400 inline-block" />
+                Goal met
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400 inline-block" />
+                Above goal
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-amber-400/70 inline-block" />
                 Logged but pending
               </span>
               <span className="text-slate-500 hidden sm:inline">
@@ -685,7 +782,7 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
                       setWeekScrolled(true);
                       setShowWeeklyComparison(false);
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-[11px] font-bold transition cursor-pointer min-h-[36px]"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-[11px] font-bold transition cursor-pointer min-h-[44px]"
                   >
                     Join into 1 →
                   </button>
@@ -694,7 +791,7 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
                     {!showWeeklyComparison && (
                       <button
                         onClick={() => setShowWeeklyComparison(true)}
-                        className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-200 text-[11px] font-bold transition cursor-pointer min-h-[36px]"
+                        className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-200 text-[11px] font-bold transition cursor-pointer min-h-[44px]"
                       >
                         View weekly comparison
                       </button>
@@ -706,7 +803,7 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
                         setWeekScrolled(false);
                         setShowWeeklyComparison(false);
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-[11px] font-bold transition cursor-pointer min-h-[36px]"
+                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-[11px] font-bold transition cursor-pointer min-h-[44px]"
                     >
                       ← Split to 7
                     </button>
@@ -719,20 +816,30 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
             {isCombined && showWeeklyComparison && (
               <div className="rounded-xl border border-cyan-400/30 bg-white/[0.02] p-4 space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-bold text-white">Last 8 weeks comparison</span>
+                  <span className="text-[11px] font-bold text-white">
+                    {weeklyHistory.weeks.length > 8
+                      ? `All ${weeklyHistory.weeks.length} weeks since you started`
+                      : 'Last 8 weeks comparison'}
+                  </span>
                   <button
                     onClick={() => setShowWeeklyComparison(false)}
-                    className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-[11px] font-bold transition cursor-pointer min-h-[36px]"
+                    className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-[11px] font-bold transition cursor-pointer min-h-[44px]"
                   >
                     ← Back to weekly total
                   </button>
                 </div>
-                <div className="flex items-end gap-2 h-36">
+                <div className="flex items-end gap-2 h-36 overflow-x-auto pb-1">
                   {weeklyHistory.weeks.map((wk) => {
                     const pct = weeklyHistory.maxWk > 0 ? Math.min(100, Math.round((wk.doneHours / weeklyHistory.maxWk) * 100)) : 0;
                     const metGoal = wk.doneHours >= weeklyGoal && wk.doneHours > 0;
                     return (
-                      <div key={wk.key} className="flex-1 flex flex-col items-center justify-end gap-1 h-full min-w-0" title={`${wk.subLabel}: ${wk.doneHours}h done / ${wk.totalHours}h logged (goal ${weeklyGoal}h)`}>
+                      <div
+                        key={wk.key}
+                        className={`flex flex-col items-center justify-end gap-1 h-full ${
+                          weeklyHistory.weeks.length <= 8 ? 'flex-1 min-w-0' : 'w-[11%] shrink-0'
+                        }`}
+                        title={`${wk.subLabel}: ${wk.doneHours}h done / ${wk.totalHours}h logged (goal ${weeklyGoal}h)`}
+                      >
                         <span className={`text-[10px] font-black ${wk.doneHours > 0 ? 'text-white' : 'text-slate-600'}`}>{wk.doneHours > 0 ? `${wk.doneHours}h` : '—'}</span>
                         <div className={`w-full flex-1 rounded-lg overflow-hidden ${wk.isCurrent ? 'bg-emerald-500/20 border border-emerald-400/50' : 'bg-white/5 border border-white/5'}`}>
                           <div className="w-full h-full flex items-end">
@@ -740,12 +847,12 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
                           </div>
                         </div>
                         <span className="text-[9px] font-bold text-slate-500 truncate w-full text-center">{wk.label}</span>
-                        <span className="text-[8px] text-slate-600 truncate w-full text-center">{wk.subLabel}</span>
+                        <span className="text-[9px] text-slate-600 truncate w-full text-center">{wk.subLabel}</span>
                       </div>
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-slate-500">Each bar = 1 week total (completed hours) • goal {weeklyGoal}h/week • current week highlighted.</p>
+                <p className="text-[10px] text-slate-500">Each bar = 1 week total (completed hours) • goal {weeklyGoal}h/week • current week highlighted{weeklyHistory.weeks.length > 8 ? ' • scroll sideways from week 1 →' : ''}.</p>
               </div>
             )}
           </div>

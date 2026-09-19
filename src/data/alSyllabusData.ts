@@ -83,6 +83,19 @@ export function getSubjectsForStream(
   );
 }
 
+/**
+ * Combined Mathematics paper split: Units 1–11 = Pure Mathematics
+ * (Paper I), Units 12+ = Applied Mathematics (Paper II).
+ * Derived from unitNumber so it applies to already-stored progress with no
+ * migration — non-Combined-Maths topics return null.
+ */
+export function getCombinedMathsGroup(
+  topic: Pick<SyllabusTopic, 'subject' | 'unitNumber'>
+): 'Pure Mathematics' | 'Applied Mathematics' | null {
+  if (topic.subject !== 'Combined Mathematics') return null;
+  return topic.unitNumber <= 11 ? 'Pure Mathematics' : 'Applied Mathematics';
+}
+
 export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
   // ================= COMBINED MATHEMATICS =================
   // PURE MATHEMATICS (PAPER I) — Units 1-11
@@ -230,7 +243,6 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
     ],
     status: 'not_started',
   },
-  // APPLIED MATHEMATICS (PAPER II) — Units 12-18
   {
     id: 'cm-12',
     subject: 'Combined Mathematics',
@@ -243,6 +255,7 @@ export const INITIAL_SYLLABUS_TOPICS: SyllabusTopic[] = [
     ],
     status: 'not_started',
   },
+  // APPLIED MATHEMATICS (PAPER II) — Units 12-18
   {
     id: 'cm-13',
     subject: 'Combined Mathematics',

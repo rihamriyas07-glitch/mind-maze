@@ -64,7 +64,7 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = ({
     >
       <div className="flex min-h-full items-center justify-center p-4 pb-24 sm:pb-12">
         <div
-          className="w-full max-w-sm rounded-3xl border border-amber-400/40 bg-gradient-to-b from-[#1E1949] to-[#12142B] shadow-[0_0_40px_rgba(245,158,11,0.25)] text-slate-100 p-6 sm:p-8 text-center"
+          className="w-full max-w-sm rounded-3xl border border-amber-400/40 bg-gradient-to-b from-[#1E1949] to-[#12142B] shadow-[0_0_40px_rgba(245,158,11,0.25)] text-slate-100 p-6 sm:p-8 text-center max-h-[calc(100dvh-3rem)] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="text-5xl sm:text-6xl" role="img" aria-label="celebration">
@@ -80,9 +80,9 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = ({
           {celebration.stats.length > 0 && (
             <div className="grid grid-cols-3 gap-2 mt-5">
               {celebration.stats.map((s) => (
-                <div key={s.label} className="rounded-2xl bg-white/5 border border-white/10 p-2.5">
-                  <div className="text-base sm:text-lg font-black text-cyan-300">{s.value}</div>
-                  <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5">
+                <div key={s.label} className="rounded-2xl bg-white/5 border border-white/10 p-2.5 min-w-0">
+                  <div className="text-base sm:text-lg font-black text-cyan-300 truncate">{s.value}</div>
+                  <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5 truncate">
                     {s.label}
                   </div>
                 </div>

@@ -11,6 +11,7 @@ import {
   Bell,
   BellOff,
   Volume2,
+  Phone,
 } from 'lucide-react';
 import { BrowserReenableSteps } from '../notifications/BrowserReenableSteps';
 
@@ -22,6 +23,8 @@ interface SettingsScreenProps {
   onUpdateExamDate?: (dateStr: string) => void;
   /** Goals edit (Z-score + motivation note) — saved locally and synced. */
   onUpdateGoals?: (goals: { targetZScore: string; motivationNote: string }) => void;
+  /** Contact number edit — stored info only, never auth/OTP. Blank clears it. */
+  onUpdateMobileNumber?: (mobileNumber: string) => void;
   /** Current browser notification permission for the status display. */
   notificationPermission?: NotificationPermission | 'unsupported';
   /** Opens the pre-permission explainer (native prompt fires only from there). */
@@ -47,6 +50,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onUpdateSettings,
   onUpdateExamDate,
   onUpdateGoals,
+  onUpdateMobileNumber,
   username,
   userRole = 'student',
   isAdmin = false,
@@ -68,6 +72,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [goalZScore, setGoalZScore] = useState(settings.targetZScore || '');
   const [goalNote, setGoalNote] = useState(settings.motivationNote || '');
   const [goalsSavedTick, setGoalsSavedTick] = useState(false);
+  const [mobileInput, setMobileInput] = useState(settings.mobileNumber || '');
+  const [mobileSavedTick, setMobileSavedTick] = useState(false);
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,6 +93,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     onUpdateGoals?.({ targetZScore: goalZScore, motivationNote: goalNote });
     setGoalsSavedTick(true);
     setTimeout(() => setGoalsSavedTick(false), 2500);
+  };
+
+  const handleSaveMobile = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateMobileNumber?.(mobileInput);
+    setMobileSavedTick(true);
+    setTimeout(() => setMobileSavedTick(false), 2500);
   };
 
   return (
@@ -116,7 +129,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Signed in as
               </div>
-              <div className="text-lg font-black text-white">
+              <div className="text-lg font-black text-white truncate max-w-full break-all">
                 {username ? `@${username}` : 'Student'}
               </div>
               <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 mt-0.5">
@@ -448,6 +461,62 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               Save Goals
             </button>
             {goalsSavedTick && (
+              <span className="text-[11px] font-bold text-emerald-300 animate-fadeIn">Saved ✓</span>
+            )}
+          </div>
+        </form>
+      </div>
+
+      {/* Contact Card — optional mobile number (stored info only) */}
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-r from-[#1E1949] to-[#12142B] p-5 sm:p-6 backdrop-blur-xl shadow-lg">
+        <form onSubmit={handleSaveMobile} className="space-y-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-cyan-300 text-xs font-bold uppercase tracking-wider">
+              <Phone className="w-4 h-4" />
+              <span>Contact Info</span>
+            </div>
+            <h2 className="text-lg sm:text-xl font-black text-white">
+              Mobile Number <span className="text-xs font-bold text-slate-400">(optional)</span>
+            </h2>
+            <p className="text-xs text-slate-300">
+              Stored as contact info only — no verification codes, no login use. Leave blank to remove it.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Mobile Number</label>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={mobileInput}
+              onChange={(e) => setMobileInput(e.target.value)}
+              placeholder="e.g. +94 77 123 4567"
+              maxLength={30}
+              className="w-full sm:w-72 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-xs font-bold text-white placeholder-slate-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              className="px-4 py-2.5 rounded-xl bg-[#6B4EFF] hover:bg-[#7C5DFA] text-white text-xs font-bold transition shadow-md cursor-pointer min-h-[40px]"
+            >
+              Save Number
+            </button>
+            {mobileInput.trim() && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileInput('');
+                  onUpdateMobileNumber?.('');
+                }}
+                className="text-[11px] font-bold text-slate-400 hover:text-rose-300 cursor-pointer"
+              >
+                Remove number
+              </button>
+            )}
+            {mobileSavedTick && (
               <span className="text-[11px] font-bold text-emerald-300 animate-fadeIn">Saved ✓</span>
             )}
           </div>

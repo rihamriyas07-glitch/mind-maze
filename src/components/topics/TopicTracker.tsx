@@ -17,7 +17,7 @@ import {
   ArrowRight,
   TrendingUp,
 } from 'lucide-react';
-import { SUBJECT_METAS, getSubjectsForStream } from '../../data/alSyllabusData';
+import { SUBJECT_METAS, getSubjectsForStream, getCombinedMathsGroup } from '../../data/alSyllabusData';
 import {
   calculateSubjectProgression,
   calculateTopicProgress,
@@ -91,6 +91,47 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
     }
     return true;
   });
+
+  // Combined Mathematics paper split — Units 1–11 Pure (Paper I),
+  // Units 12+ Applied (Paper II). Groups respect the active search/filter
+  // (empty groups are hidden); other subjects render as one flat list.
+  type TopicListRow =
+    | { kind: 'group'; key: string; title: string; paper: string; range: string; icon: string; topics: SyllabusTopic[] }
+    | { kind: 'topic'; topic: SyllabusTopic };
+  const isCombinedMathsSelected = selectedSubject === 'Combined Mathematics';
+  const topicRows: TopicListRow[] = (() => {
+    if (!isCombinedMathsSelected) return displayedTopics.map((topic) => ({ kind: 'topic' as const, topic }));
+    const groups = [
+      { key: 'pure', title: 'Pure Mathematics', paper: 'Paper I', range: 'Units 1–11', icon: '📐' },
+      { key: 'applied', title: 'Applied Mathematics', paper: 'Paper II', range: 'Units 12–18', icon: '📊' },
+    ];
+    const rows: TopicListRow[] = [];
+    for (const g of groups) {
+      const groupTopics = displayedTopics.filter((t) => getCombinedMathsGroup(t) === g.title);
+      if (groupTopics.length === 0) continue;
+      rows.push({ kind: 'group', ...g, topics: groupTopics });
+      for (const topic of groupTopics) rows.push({ kind: 'topic', topic });
+    }
+    return rows;
+  })();
+
+  const groupStats = (ts: SyllabusTopic[]) => {
+    let points = 0;
+    let total = 0;
+    let done = 0;
+    ts.forEach((t) => {
+      const p = calculateTopicProgress(t);
+      const subs = t.subtopics && t.subtopics.length > 0 ? t.subtopics.length : 1;
+      total += subs;
+      points += (p.percentage / 100) * subs;
+      if (p.isCompleted) done++;
+    });
+    return {
+      percentage: total > 0 ? Math.round((points / total) * 100) : 0,
+      completed: done,
+      total: ts.length,
+    };
+  };
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,7 +283,7 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
           </div>
 
           {/* Quick status counters */}
-          <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4 text-center">
+          <div className="mt-4 grid grid-cols-3 gap-1.5 sm:gap-4 text-center">
             <button
               onClick={() => setStatusFilter('completed')}
               className={`p-2.5 rounded-xl border transition cursor-pointer ${
@@ -350,7 +391,41 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
             <p className="text-xs text-slate-400 mt-1">Try resetting the filter or adding a custom topic.</p>
           </div>
         ) : (
-          displayedTopics.map((topic) => {
+          topicRows.map((row) => {
+            if (row.kind === 'group') {
+              const stats = groupStats(row.topics);
+              return (
+                <div
+                  key={row.key}
+                  className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{row.icon}</span>
+                    <div>
+                      <h3 className="text-sm font-black text-white">
+                        {row.title}{' '}
+                        <span className="text-[10px] font-bold text-slate-400">
+                          • {row.paper} • {row.range}
+                        </span>
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        {stats.completed} of {stats.total} units complete
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-24 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[#6B4EFF] to-cyan-400"
+                        style={{ width: `${stats.percentage}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-black text-cyan-300">{stats.percentage}%</span>
+                  </div>
+                </div>
+              );
+            }
+            const topic = row.topic;
             const isExpanded = expandedTopicId === topic.id;
 
             return (
@@ -585,9 +660,9 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
             >
               {/* Pinned Modal Header */}
               <div className="flex items-center justify-between p-4 sm:p-5 border-b border-white/10 shrink-0 bg-[#161831]">
-                <div className="flex items-center gap-2 text-base font-bold text-white">
-                  <Plus className="w-5 h-5 text-cyan-400" />
-                  <span>Add Syllabus Topic to {selectedSubject}</span>
+                <div className="flex items-center gap-2 text-base font-bold text-white min-w-0 flex-1">
+                  <Plus className="w-5 h-5 text-cyan-400 shrink-0" />
+                  <span className="truncate">Add Syllabus Topic to {selectedSubject}</span>
                 </div>
                 <button
                   type="button"
@@ -656,7 +731,7 @@ export const TopicTracker: React.FC<TopicTrackerProps> = ({
               </div>
 
               {/* Pinned Sticky Footer */}
-              <div className="p-3.5 sm:p-4 border-t border-white/10 bg-[#14162e]/95 backdrop-blur-md flex items-center justify-end gap-2.5 shrink-0">
+              <div className="p-3.5 sm:p-4 border-t border-white/10 bg-[#14162e]/95 backdrop-blur-md flex flex-wrap items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}

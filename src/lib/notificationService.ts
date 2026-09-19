@@ -89,6 +89,42 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return output;
 }
 
+/** Current VAPID public key as bytes; null when unconfigured/invalid. */
+function getVapidKeyBytes(): Uint8Array | null {
+  try {
+    const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+    if (!publicKey) return null;
+    return urlBase64ToUint8Array(publicKey);
+  } catch {
+    return null;
+  }
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * True when the subscription was minted with the CURRENT VAPID public key.
+ * Some browsers hide applicationServerKey (null) — that counts as a match:
+ * the subscription is kept and its server row is re-verified instead of
+ * being destroyed on a guess.
+ */
+function subscriptionUsesCurrentKey(sub: PushSubscription, keyBytes: Uint8Array): boolean {
+  try {
+    const raw = (sub.options as PushSubscriptionOptions | undefined)?.applicationServerKey ?? null;
+    if (!raw) return true;
+    const existing = raw instanceof Uint8Array ? raw : new Uint8Array(raw as ArrayBuffer);
+    return bytesEqual(existing, keyBytes);
+  } catch {
+    return true;
+  }
+}
+
 export function isPushSupported(): boolean {
   return (
     typeof window !== 'undefined' &&
@@ -120,7 +156,12 @@ async function getReadyRegistration(timeoutMs = 3000): Promise<ServiceWorkerRegi
 
 /**
  * Subscribe this browser/device for closed-app push and save it to Supabase.
- * Safe to call repeatedly: reuses the existing subscription and upserts.
+ * Safe to call repeatedly: reuses a healthy subscription and upserts.
+ *
+ * AUTO-HEALING: when the existing subscription was minted under a previous
+ * VAPID public key (e.g. the key was rotated), the stale subscription is
+ * unsubscribed, its server row deleted, and a fresh subscription created —
+ * all silently, with no browser-settings trip for the student.
  * Returns true when a subscription is stored.
  */
 export async function subscribeForPush(): Promise<boolean> {
@@ -128,8 +169,8 @@ export async function subscribeForPush(): Promise<boolean> {
     if (!isPushSupported()) return false;
     if (Notification.permission !== 'granted') return false;
 
-    const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
-    if (!publicKey) {
+    const keyBytes = getVapidKeyBytes();
+    if (!keyBytes) {
       console.warn('[Push] VITE_VAPID_PUBLIC_KEY is not set. Skipping push subscription.');
       return false;
     }
@@ -147,13 +188,48 @@ export async function subscribeForPush(): Promise<boolean> {
       reg = await registerServiceWorker();
     }
     if (!reg) return false;
-    const existing = await reg.pushManager.getSubscription();
-    const sub =
-      existing ??
-      (await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      }));
+
+    // Drop a stale subscription from before a VAPID key rotation: pushes to
+    // it can never be delivered, and subscribing while it exists throws.
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && !subscriptionUsesCurrentKey(sub, keyBytes)) {
+      const staleEndpoint = sub.endpoint;
+      await sub.unsubscribe().catch(() => undefined);
+      try {
+        await supabase.from('push_subscriptions').delete().eq('user_id', userId).eq('endpoint', staleEndpoint);
+      } catch {
+        // Row cleanup is best-effort; the server also prunes dead
+        // endpoints on 404/410 during sends.
+      }
+      sub = null;
+    }
+
+    if (!sub) {
+      try {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: keyBytes,
+        });
+      } catch (subErr) {
+        // Racy stale state (e.g. InvalidStateError: a subscription exists
+        // that getSubscription didn't see): clear once and retry a single
+        // time before giving up.
+        try {
+          const ghost = await reg.pushManager.getSubscription();
+          if (ghost) {
+            const ghostEndpoint = ghost.endpoint;
+            await ghost.unsubscribe().catch(() => undefined);
+            await supabase.from('push_subscriptions').delete().eq('user_id', userId).eq('endpoint', ghostEndpoint);
+          }
+        } catch {
+          // Best-effort only — fall through to the single retry below.
+        }
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: keyBytes,
+        });
+      }
+    }
 
     const json = sub.toJSON();
     const p256dh = json.keys?.p256dh;
@@ -223,6 +299,84 @@ export async function unsubscribeFromPush(): Promise<void> {
     await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
   } catch (err) {
     console.warn('[Push] unsubscribeFromPush failed:', err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Silent background health check. Runs on app load / sign-in and (throttled)
+// when the tab regains focus. Never shows UI and never throws — students who
+// never granted permission keep seeing the existing Enable prompts as before.
+// ---------------------------------------------------------------------------
+
+export type PushHealthStatus = 'healthy' | 'unavailable' | 'skipped' | 'cleaned' | 'unsupported';
+
+/** Minimum gap between background heal passes (explicit sign-in always heals). */
+const HEAL_THROTTLE_MS = 5 * 60 * 1000;
+let lastHealAt = 0;
+
+/** Last permission value reported to the profile (avoids an UPDATE per load). */
+const PERM_REPORT_KEY = 'mindmaze_push_perm_reported';
+
+/**
+ * Report this device's live browser permission to the student's profile row
+ * (Admin Panel health view). Silent telemetry: skips when signed out or
+ * already reported; never throws.
+ */
+async function reportPushPermissionToProfile(perm: 'granted' | 'denied' | 'default' | 'unsupported'): Promise<void> {
+  try {
+    try {
+      if (localStorage.getItem(PERM_REPORT_KEY) === perm) return;
+    } catch {
+      // Storage unavailable — still attempt the report.
+    }
+    const { supabase } = await import('./supabaseClient');
+    if (!supabase) return;
+    const { data } = await supabase.auth.getUser();
+    if (!data.user?.id) return;
+    const { updateProfilePushPermission } = await import('./cloudStore');
+    const saved = await updateProfilePushPermission(data.user.id, perm);
+    if (saved) {
+      try {
+        localStorage.setItem(PERM_REPORT_KEY, perm);
+      } catch {}
+    }
+  } catch {
+    // Telemetry must never interrupt the student.
+  }
+}
+
+/**
+ * Ensure this device can receive closed-app push, healing silently:
+ * - permission granted → drop VAPID-stale subscriptions, (re)subscribe when
+ *   the server row is missing, report 'granted'. Throttled unless forced.
+ * - permission denied → drop any dead subscription row, report 'denied'.
+ * - permission default (never asked) → do nothing; existing Enable
+ *   prompts/banners keep showing as before.
+ * - push unsupported → report 'unsupported', nothing else to do.
+ */
+export async function ensureHealthyPushSubscription(options?: { force?: boolean }): Promise<PushHealthStatus> {
+  try {
+    if (!isPushSupported()) {
+      void reportPushPermissionToProfile('unsupported');
+      return 'unsupported';
+    }
+    const perm = Notification.permission;
+    if (perm === 'granted') {
+      const now = Date.now();
+      if (!options?.force && now - lastHealAt < HEAL_THROTTLE_MS) return 'skipped';
+      lastHealAt = now;
+      const ok = await subscribeForPush();
+      void reportPushPermissionToProfile('granted');
+      return ok ? 'healthy' : 'unavailable';
+    }
+    if (perm === 'denied') {
+      await cleanupStalePushSubscription();
+      void reportPushPermissionToProfile('denied');
+      return 'cleaned';
+    }
+    return 'skipped';
+  } catch {
+    return 'unavailable';
   }
 }
 
