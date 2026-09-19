@@ -347,12 +347,19 @@ async function reportPushPermissionToProfile(perm: 'granted' | 'denied' | 'defau
 
 /**
  * Ensure this device can receive closed-app push, healing silently:
- * - permission granted → drop VAPID-stale subscriptions, (re)subscribe when
- *   the server row is missing, report 'granted'. Throttled unless forced.
- * - permission denied → drop any dead subscription row, report 'denied'.
- * - permission default (never asked) → do nothing; existing Enable
- *   prompts/banners keep showing as before.
+ * - permission granted → report 'granted' immediately, then drop
+ *   VAPID-stale subscriptions and (re)subscribe when the server row is
+ *   missing. Throttled unless forced.
+ * - permission denied → report 'denied' immediately, then drop any dead
+ *   subscription row.
+ * - permission default (never asked) → report 'default' so the Admin Panel
+ *   can tell a current client apart from an old/never-reporting one, then
+ *   do nothing else; existing Enable prompts keep showing as before.
  * - push unsupported → report 'unsupported', nothing else to do.
+ *
+ * The permission report always fires BEFORE the slower subscription/SW
+ * handshake: the profile UPDATE is cheap and must not wait behind (or be
+ * lost with) work that can take seconds or be cut off by a tab close.
  */
 export async function ensureHealthyPushSubscription(options?: { force?: boolean }): Promise<PushHealthStatus> {
   try {
@@ -362,18 +369,19 @@ export async function ensureHealthyPushSubscription(options?: { force?: boolean 
     }
     const perm = Notification.permission;
     if (perm === 'granted') {
+      void reportPushPermissionToProfile('granted');
       const now = Date.now();
       if (!options?.force && now - lastHealAt < HEAL_THROTTLE_MS) return 'skipped';
       lastHealAt = now;
       const ok = await subscribeForPush();
-      void reportPushPermissionToProfile('granted');
       return ok ? 'healthy' : 'unavailable';
     }
     if (perm === 'denied') {
-      await cleanupStalePushSubscription();
       void reportPushPermissionToProfile('denied');
+      await cleanupStalePushSubscription();
       return 'cleaned';
     }
+    void reportPushPermissionToProfile('default');
     return 'skipped';
   } catch {
     return 'unavailable';

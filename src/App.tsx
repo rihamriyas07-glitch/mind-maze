@@ -28,7 +28,6 @@ import {
   playStudyChime,
   ensureHealthyPushSubscription,
   unsubscribeFromPush,
-  cleanupStalePushSubscription,
   listenForPushSubscriptionChange,
 } from './lib/notificationService';
 import {
@@ -2178,9 +2177,11 @@ export default function App() {
             hasSeenNotificationPrompt: true,
           });
           if (perm === 'denied') {
-            // Student dismissed/denied: drop any stale subscription row for
-            // this device so the server doesn't keep pushing to it.
-            void cleanupStalePushSubscription().catch(() => undefined);
+            // Student dismissed/denied: heal with force so the denial is
+            // reported to the profile immediately (Admin health view) and
+            // any stale subscription row for this device is dropped so the
+            // server doesn't keep pushing to it.
+            void ensureHealthyPushSubscription({ force: true }).catch(() => undefined);
           }
         }}
       />

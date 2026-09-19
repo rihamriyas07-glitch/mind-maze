@@ -12,6 +12,7 @@ import {
 import {
   fetchAllProfiles,
   fetchPushAdminOverview,
+  checkPushHealthMigration,
   AdminProfileEntry,
   PushDeviceSummary,
   UserRole,
@@ -46,6 +47,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [pushOverview, setPushOverview] = useState<PushDeviceSummary[]>([]);
   const [loadingPush, setLoadingPush] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
+  // Null until probed. False means the push-health migration was never run:
+  // every row then shows "Not asked" / "Not subscribed" regardless of
+  // reality, so the panel must say so instead of looking complete.
+  const [pushMigrationOk, setPushMigrationOk] = useState<boolean | null>(null);
 
   const loadUsers = useCallback(async () => {
     setLoadingUsers(true);
@@ -77,6 +82,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       );
     } finally {
       setLoadingPush(false);
+    }
+    // Probe the telemetry column even when the overview "succeeds": a
+    // missing push_admin_read_all policy filters rows silently (no error),
+    // and a missing push_permission column makes every badge "Not asked".
+    // Both come from the same migration file, so one probe covers both.
+    try {
+      setPushMigrationOk((await checkPushHealthMigration()).pushPermissionColumn);
+    } catch {
+      // Probe is advisory only — leave the previous value on failure.
     }
   }, []);
 
@@ -234,6 +248,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <dd className="text-base font-black text-slate-300 mt-0.5">{permUnsupported}</dd>
           </div>
         </dl>
+
+        {pushMigrationOk === false && (
+          <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-200 text-xs font-semibold mb-3 leading-relaxed">
+            Push telemetry is not set up in Supabase yet, so every student shows &ldquo;Not asked&rdquo; /
+            &ldquo;Not subscribed&rdquo; regardless of reality: permission reports have nowhere to land and the
+            admin subscription overview is blind. Run{' '}
+            <code className="px-1 py-0.5 rounded bg-black/40 border border-white/15">supabase/migration_add_push_admin_overview.sql</code>{' '}
+            in the Supabase SQL Editor (one step: telemetry column + admin read policy + overview function),
+            then press Refresh. (If the push_subscriptions table itself is missing,
+            run <code className="px-1 py-0.5 rounded bg-black/40 border border-white/15">supabase/migration_add_push_subscriptions.sql</code> first.)
+          </div>
+        )}
 
         {pushError && (
           <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold mb-3">

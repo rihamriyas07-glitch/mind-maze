@@ -355,10 +355,62 @@ export interface PushDeviceSummary {
 }
 
 /**
- * Load every student's subscription presence. Only succeeds for admins (see
- * the push_admin_read_all RLS policy); everyone else gets an RLS error.
+ * Load every student's subscription presence, admin-gated server-side.
+ * Primary path is the get_push_admin_overview() RPC (aggregates only — key
+ * material and endpoint URLs never leave the database). Unlike a raw table
+ * SELECT, a missing setup fails LOUDLY here instead of RLS-filtering to an
+ * empty list that the panel would misread as "nobody subscribed".
+ * Falls back to the legacy direct select for databases that ran
+ * migration_add_push_health.sql but not yet migration_add_push_admin_overview.sql.
  */
 export async function fetchPushAdminOverview(): Promise<PushDeviceSummary[]> {
+  try {
+    const { data, error } = await requireClient().rpc('get_push_admin_overview');
+    if (error) throw error;
+    return ((data ?? []) as Record<string, unknown>[]).flatMap((r) => {
+      const uid = typeof r.user_id === 'string' ? r.user_id : String(r.user_id ?? '');
+      if (!uid) return [];
+      const n = Number(r.device_count ?? 0);
+      return [
+        {
+          userId: uid,
+          deviceCount: Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0,
+          latestAt: typeof r.latest_at === 'string' ? r.latest_at : null,
+          // The RPC returns aggregates only (no per-device user agent).
+          userAgent: null,
+        },
+      ];
+    });
+  } catch (err) {
+    if (err instanceof CloudError) throw err;
+    const { message, code } = describeError(err);
+    // RPC not installed yet → legacy direct-select path (works once the
+    // push_admin_read_all policy exists).
+    if (code === 'PGRST202' || /could not find the function|function .* does not exist/i.test(message)) {
+      return await fetchPushAdminOverviewDirect();
+    }
+    if (
+      code === '42P01' ||
+      /relation .* does not exist|could not find the table/i.test(message)
+    ) {
+      throw new CloudError(
+        'Push overview is not available: the push_subscriptions table is missing. Please run supabase/migration_add_push_subscriptions.sql in the Supabase SQL Editor first, then supabase/migration_add_push_admin_overview.sql.'
+      );
+    }
+    throw friendlyError('Could not load push overview.', err);
+  }
+}
+
+/**
+ * Legacy direct-select overview (works once the push_admin_read_all policy
+ * exists). Kept as a fallback for databases that ran
+ * migration_add_push_health.sql but not the newer overview migration.
+ * NOTE: without that policy, RLS silently filters to the viewer's own rows
+ * (no error) — an empty result here must never be mistaken for "nobody
+ * subscribed", which is exactly the false display this RPC-first ordering
+ * plus the Admin Panel migration banner guard against.
+ */
+async function fetchPushAdminOverviewDirect(): Promise<PushDeviceSummary[]> {
   try {
     const { data, error } = await requireClient()
       .from('push_subscriptions')
@@ -380,13 +432,38 @@ export async function fetchPushAdminOverview(): Promise<PushDeviceSummary[]> {
     return [...byUser.values()];
   } catch (err) {
     if (err instanceof CloudError) throw err;
-    const { message } = describeError(err);
+    const { message, code } = describeError(err);
+    if (
+      code === '42P01' ||
+      /relation .* does not exist|could not find the table/i.test(message)
+    ) {
+      throw new CloudError(
+        'Push overview is not available: the push_subscriptions table is missing. Please run supabase/migration_add_push_subscriptions.sql in the Supabase SQL Editor first, then supabase/migration_add_push_admin_overview.sql.'
+      );
+    }
     if (/permission denied|policy|not allowed|unauthorized/i.test(message)) {
       throw new CloudError(
-        'Push overview is not available: your database needs the push-health update. Please run supabase/migration_add_push_health.sql in the Supabase SQL Editor first (it adds the admin read policy).'
+        'Push overview is not available: your database needs the push-admin update. Please run supabase/migration_add_push_admin_overview.sql in the Supabase SQL Editor first (it adds the overview function and the admin read policy).'
       );
     }
     throw friendlyError('Could not load push overview.', err);
+  }
+}
+
+/**
+ * Probe whether the push-health migration has been applied to this database
+ * (profiles.push_permission column present). Used by the Admin Panel to warn
+ * instead of silently showing "Not asked" for everyone when telemetry has
+ * nowhere to land. Never throws and never false-alarms on network errors:
+ * any non-column error resolves to true (assume healthy).
+ */
+export async function checkPushHealthMigration(): Promise<{ pushPermissionColumn: boolean }> {
+  try {
+    const { error } = await requireClient().from('profiles').select('push_permission').limit(1);
+    if (error && isMissingColumnError(error)) return { pushPermissionColumn: false };
+    return { pushPermissionColumn: true };
+  } catch {
+    return { pushPermissionColumn: true };
   }
 }
 
