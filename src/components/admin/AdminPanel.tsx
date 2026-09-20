@@ -163,8 +163,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // ---- Push health aggregates ----
   const students = users.filter((u) => u.role !== 'admin');
+  const admins = users.filter((u) => u.role === 'admin');
   const pushByUser = new Map<string, PushDeviceSummary>(pushOverview.map((p) => [p.userId, p]));
   const subscribedStudents = students.filter((u) => (pushByUser.get(u.id)?.deviceCount ?? 0) > 0);
+  // Admin devices count too (e.g. your own test subscriptions) — shown
+  // separately so student-outreach metrics stay student-scoped.
+  const subscribedAdmins = admins.filter((u) => (pushByUser.get(u.id)?.deviceCount ?? 0) > 0);
+  const subscribedTotal = subscribedStudents.length + subscribedAdmins.length;
   const permGranted = students.filter((u) => u.pushPermission === 'granted').length;
   const permDenied = students.filter((u) => u.pushPermission === 'denied').length;
   const permUnsupported = students.filter((u) => u.pushPermission === 'unsupported').length;
@@ -245,7 +250,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
           <div className="rounded-xl bg-black/30 border border-emerald-400/30 p-3">
             <dt className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Subscribed</dt>
-            <dd className="text-base font-black text-emerald-300 mt-0.5">{subscribedStudents.length}</dd>
+            <dd className="text-base font-black text-emerald-300 mt-0.5">{subscribedTotal}</dd>
+            {subscribedAdmins.length > 0 && (
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                incl. {subscribedAdmins.length} admin{subscribedAdmins.length === 1 ? '' : 's'}
+              </p>
+            )}
           </div>
           <div className="rounded-xl bg-black/30 border border-white/10 p-3">
             <dt className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Permission granted</dt>
@@ -265,13 +275,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </dl>
 
-        {/* Self-diagnosis: raw query result vs matched students. If these two
+        {/* Self-diagnosis: raw query result vs matched profiles. If these two
             numbers disagree, the join (not the query) is where rows vanish. */}
         {!loadingPush && !pushError && (
           <p className="text-[11px] text-slate-500 -mt-2 mb-3">
-            Overview response: {pushOverview.length} user(s) with rows · {subscribedStudents.length} matched to
-            students · project <code className="text-slate-400">{projectRef}</code>
-            {pushOverview.length > subscribedStudents.length &&
+            Overview response: {pushOverview.length} user(s) with rows · {subscribedTotal} matched (
+            {subscribedStudents.length} student{subscribedStudents.length === 1 ? '' : 's'} +{' '}
+            {subscribedAdmins.length} admin{subscribedAdmins.length === 1 ? '' : 's'}) · project{' '}
+            <code className="text-slate-400">{projectRef}</code>
+            {pushOverview.length > subscribedTotal &&
               ' — some rows belong to unknown/deleted profiles (orphans).'}
           </p>
         )}
@@ -310,12 +322,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {students.map((u) => {
+                {[...students, ...admins].map((u) => {
                   const push = pushByUser.get(u.id);
                   const devices = push?.deviceCount ?? 0;
                   return (
                     <tr key={u.id} className="border-b border-white/5 hover:bg-white/[0.03]">
-                      <td className="py-2.5 pr-3 font-bold text-white">@{u.username ?? '—'}</td>
+                      <td className="py-2.5 pr-3 font-bold text-white">
+                        @{u.username ?? '—'}
+                        {u.role === 'admin' && (
+                          <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full border bg-cyan-500/20 text-cyan-300 border-cyan-400/40 align-middle">
+                            admin
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2.5 pr-3">{permissionBadge(u.pushPermission)}</td>
                       <td className="py-2.5 pr-3">
                         {devices > 0 ? (
