@@ -47,6 +47,7 @@ import { MobileBottomBar } from './components/MobileBottomBar';
 import { MazeBackground } from './components/MazeBackground';
 import { IOSInstallBanner } from './components/IOSInstallBanner';
 import { NotificationPermissionModal } from './components/notifications/NotificationPermissionModal';
+import { PushSubscribeBanner } from './components/notifications/PushSubscribeBanner';
 import { DashboardOverview } from './components/dashboard/DashboardOverview';
 import { StudyPlanner } from './components/planner/StudyPlanner';
 import { BlockEndCheckin } from './components/planner/BlockEndCheckin';
@@ -2218,6 +2219,17 @@ export default function App() {
 
       {/* iOS Safari PWA Install Banner */}
       <IOSInstallBanner />
+
+      {/* Tap-to-subscribe for existing users: one-time onboarding modal never
+          re-fires, so undecided/blocked devices get this banner instead. One
+          tap opens the explainer modal; the native prompt still needs the
+          tap inside it. Signed-in only; silent when granted/unsupported. */}
+      {authUserId && username && (
+        <PushSubscribeBanner
+          permission={notificationPermission}
+          onEnable={() => setIsNotificationModalOpen(true)}
+        />
+      )}
 
       {/* End-of-block check-in: fires on any screen when a block's end time passes */}
       {checkinTask && (

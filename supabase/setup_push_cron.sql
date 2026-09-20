@@ -12,15 +12,22 @@ create extension if not exists pg_net;
 
 -- Every 15 minutes, POST to the Edge Function (service role bypasses RLS
 -- so it can read all subscriptions / timetable rows due in this window).
+--
+-- SECURITY: never paste your real service_role key here — this file is
+-- committed to git. Either substitute it at run time, or (recommended)
+-- store it in Vault and reference it with
+--   (select decrypted_secret from vault.decrypted_secrets where name = 'service_role_key')
+-- A real key was previously committed in this file's history; rotate it in
+-- Supabase Dashboard > Project Settings > API so the old one stops working.
 select cron.schedule(
   'mindmaze-send-push-15min',
   '*/15 * * * *',
   $$
   select net.http_post(
-    url := 'https://<oqtwygdzpzrkfrxhjyxl>.supabase.co/functions/v1/send-push',
+    url := 'https://<PROJECT_REF>.supabase.co/functions/v1/send-push',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer <eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xdHd5Z2R6cHpya2ZyeGhqeXhsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODc4NDg1NiwiZXhwIjoyMTA0MzYwODU2fQ.nIhOwbuoWyekizBc1R17npn6dqF4gnERPnmNIVerMGY>'
+      'Authorization', 'Bearer <SERVICE_ROLE_KEY>'
     ),
     body := '{}'::jsonb
   );
