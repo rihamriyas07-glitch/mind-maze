@@ -39,12 +39,24 @@ exception when duplicate_object then
   -- Primary key already exists (e.g. the old composite key): keep it; the
   -- unique constraint below is what the client upsert needs.
   null;
+when duplicate_table then
+  -- Backing index already exists from a partial run: same outcome, skip.
+  null;
 end $$;
 do $$
 begin
-  alter table public.push_subscriptions
-    add constraint push_subscriptions_user_endpoint_unique unique (user_id, endpoint);
+  -- Only add when truly missing: a previous partial run leaves the backing
+  -- index behind, in which case Postgres raises 42P07 (duplicate_table),
+  -- NOT 42710 (duplicate_object) — so check first AND catch both.
+  if not exists (
+    select 1 from pg_constraint where conname = 'push_subscriptions_user_endpoint_unique'
+  ) then
+    alter table public.push_subscriptions
+      add constraint push_subscriptions_user_endpoint_unique unique (user_id, endpoint);
+  end if;
 exception when duplicate_object then
+  null;
+when duplicate_table then
   null;
 end $$;
 
