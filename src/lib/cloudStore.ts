@@ -456,6 +456,9 @@ export interface SendPushDryRun {
   vapidConfigured: boolean;
   subscriptionRows: number;
   enabledSlotsToday: number;
+  /** Which daily-quiz window is live right now (12:00 / 17:00 SL), if any. */
+  quizSlotNow?: 'noon' | 'evening' | null;
+  quizWindows?: string[];
 }
 
 /**
@@ -477,6 +480,8 @@ export async function fetchSendPushDryRun(): Promise<SendPushDryRun> {
       vapidConfigured: r.vapidConfigured === true,
       subscriptionRows: typeof r.subscriptionRows === 'number' ? r.subscriptionRows : 0,
       enabledSlotsToday: typeof r.enabledSlotsToday === 'number' ? r.enabledSlotsToday : 0,
+      quizSlotNow: r.quizSlotNow === 'noon' || r.quizSlotNow === 'evening' ? r.quizSlotNow : null,
+      quizWindows: Array.isArray(r.quizWindows) ? (r.quizWindows as string[]) : ['12:00', '17:00'],
     };
   } catch (err) {
     const { message } = describeError(err);

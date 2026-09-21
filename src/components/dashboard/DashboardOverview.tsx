@@ -32,6 +32,8 @@ import {
 } from '../../lib/notificationService';
 import { BrowserReenableSteps } from '../notifications/BrowserReenableSteps';
 import { PWAInstallButton } from '../PWAInstallButton';
+import { DailyTargetCard } from '../targets/DailyTargetCard';
+import { Leaderboard } from '../leaderboard/Leaderboard';
 import {
   calculateSubjectProgression,
   calculateOverallStreamProgression,
@@ -60,6 +62,10 @@ interface DashboardOverviewProps {
   onToggleTask: (taskId: string) => void;
   username?: string | null;
   onNavigateToSettings?: () => void;
+  /** Student's personal daily-hours goal (used until the admin target syncs). */
+  dailyHoursGoal?: number;
+  /** Signed-in student's id — highlights their row on the leaderboard. */
+  currentUserId?: string | null;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -79,6 +85,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   targetZScore = null,
   motivationNote = null,
   onNavigateToSettings,
+  dailyHoursGoal = 2,
+  currentUserId = null,
 }) => {
   const todayStr = getTodayDateString();
   const todayDayOfWeek = getTodayDayOfWeek();
@@ -347,6 +355,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 🎯 Daily Target — admin-set global goal + quiz CTA */}
+      <DailyTargetCard
+        tasks={dailyTasks}
+        personalHoursGoal={dailyHoursGoal}
+        onOpenPlanner={() => onNavigate('planner')}
+      />
 
       {/* Overview Metric Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -751,6 +766,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 🏆 Leaderboard preview — every student sees the friendly competition */}
+      <Leaderboard
+        currentUserId={currentUserId}
+        compact
+        onViewAll={() => onNavigate('progress')}
+      />
     </div>
   );
 };

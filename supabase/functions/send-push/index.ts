@@ -177,6 +177,14 @@ Deno.serve(async (req) => {
       vapidConfigured: !!(VAPID_PUBLIC && VAPID_PRIVATE),
       subscriptionRows: subCount ?? 0,
       enabledSlotsToday: slotCount ?? 0,
+      // Daily quiz reminders (12:00 + 17:00 SL): the cron tick that falls in
+      // either 15-min window fans out to every subscribed student.
+      quizSlotNow: (slNowMin >= 12 * 60 && slNowMin < 12 * 60 + 15)
+        ? "noon"
+        : (slNowMin >= 17 * 60 && slNowMin < 17 * 60 + 15)
+          ? "evening"
+          : null,
+      quizWindows: ["12:00", "17:00"],
     });
   }
 

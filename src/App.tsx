@@ -43,6 +43,12 @@ import {
   generateSmartStudyReminder,
   generateCompletionCelebration,
 } from './lib/notificationMessages';
+import {
+  checkDueQuizReminder,
+  fetchDailyTarget,
+  markQuizReminderSeen,
+  quizReminderCopy,
+} from './lib/dailyTarget';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { Navbar } from './components/Navbar';
 import { MobileBottomBar } from './components/MobileBottomBar';
@@ -292,6 +298,20 @@ export default function App() {
       return next;
     });
   };
+
+  // ---- Global daily target (admin-set) for the in-app quiz reminder link ----
+  const [quizChannelUrl, setQuizChannelUrl] = useState<string>(
+    'https://whatsapp.com/channel/0029Vb8OnJGCRs1fpYosgU1z'
+  );
+  useEffect(() => {
+    let live = true;
+    void fetchDailyTarget().then((t) => {
+      if (live) setQuizChannelUrl(t.quizChannelUrl);
+    });
+    return () => {
+      live = false;
+    };
+  }, [authUserId]);
 
   // Celebration queue: day-complete / subject-complete / streak-milestone
   // modals. Only the first shows; closing it reveals the next (max 3 queued).
@@ -1024,6 +1044,28 @@ export default function App() {
         setTimeout(() => setActiveToastReminder(null), 8000);
       }
 
+      // 4b. Daily quiz reminders (12:00 & 17:00 local, once per slot/day).
+      // Closed-app twin lives in supabase/functions/send-push (same slots,
+      // same WhatsApp channel link) — this covers the open-app case.
+      try {
+        const due = checkDueQuizReminder(new Date());
+        if (due) {
+          const copy = quizReminderCopy(due.slot);
+          markQuizReminderSeen(due.dateStr, due.slot);
+          void sendStudyNotification(
+            copy.title,
+            copy.body,
+            '/icon-192.png',
+            `mind-maze-quiz-${due.slot}-${due.dateStr}`,
+            quizChannelUrl
+          );
+          setActiveToastReminder(`${copy.title}: ${copy.body}`);
+          setTimeout(() => setActiveToastReminder(null), 8000);
+        }
+      } catch {
+        /* quiz reminder must never break the reminder loop */
+      }
+
       // 4. End-of-block check-in: today's incomplete block whose end time just
       //    passed and hasn't been answered/snoozed yet. One prompt at a time.
       if (!checkinTaskId) {
@@ -1064,7 +1106,7 @@ export default function App() {
     const interval = setInterval(runChecks, 30000);
 
     return () => clearInterval(interval);
-  }, [timetableEntries, dailyTasks, streakData.currentStreak, settings.targetExamDate, settings.motivationNote, checkinTaskId, checkinAsked, checkinSnooze]);
+  }, [timetableEntries, dailyTasks, streakData.currentStreak, settings.targetExamDate, settings.motivationNote, checkinTaskId, checkinAsked, checkinSnooze, quizChannelUrl]);
 
   // Manual Test Triggers for Review & Instant Verification
   const handleTestSmartReminder = () => {
@@ -2141,6 +2183,8 @@ export default function App() {
             onNavigate={handleNavigate}
             onToggleTask={handleToggleTask}
             username={username}
+            dailyHoursGoal={settings.dailyHoursGoal}
+            currentUserId={authUserId}
           />
         )}
 
@@ -2183,6 +2227,7 @@ export default function App() {
             dailyTasks={dailyTasks}
             settings={settings}
             revisionCount={revisionStats.revisionCount}
+            currentUserId={authUserId}
           />
         )}
 

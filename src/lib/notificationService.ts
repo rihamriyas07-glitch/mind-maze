@@ -575,7 +575,8 @@ export async function sendStudyNotification(
   title: string,
   body: string,
   icon = '/icon-192.png',
-  tag = 'mind-maze-study-reminder'
+  tag = 'mind-maze-study-reminder',
+  url = '/'
 ): Promise<boolean> {
   // Always play gentle chime
   playStudyChime();
@@ -601,7 +602,7 @@ export async function sendStudyNotification(
             tag,
             renotify: true,
             vibrate: [200, 100, 200],
-            data: { url: '/' },
+            data: { url },
           } as NotificationOptions);
           return true;
         } catch (swErr) {

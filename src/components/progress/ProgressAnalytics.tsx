@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { SUBJECT_METAS, getSubjectsForStream } from '../../data/alSyllabusData';
+import { Leaderboard } from '../leaderboard/Leaderboard';
 import {
   calculateOverallStreamProgression,
   calculateSubjectProgression,
@@ -29,6 +30,8 @@ interface ProgressAnalyticsProps {
   settings: UserSettings;
   /** Separate additive habit stat (completing revisions never moves syllabus %). */
   revisionCount?: number;
+  /** Signed-in student's id — highlights their row on the leaderboard. */
+  currentUserId?: string | null;
 }
 
 export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
@@ -38,6 +41,7 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
   dailyTasks,
   settings,
   revisionCount = 0,
+  currentUserId = null,
 }) => {
   // Daily study hour goal drives the weekly target (weekly = daily x 7)
   const dailyGoal = settings.dailyHoursGoal ?? Math.round((settings.weeklyHoursGoal / 7) * 10) / 10;
@@ -954,6 +958,9 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
         </div>
       </div>
       )}
+
+      {/* 🏆 Weekly / Monthly leaderboard — friendly competition on hours */}
+      <Leaderboard currentUserId={currentUserId} />
     </div>
   );
 };
