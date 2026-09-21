@@ -8,11 +8,16 @@ import {
   Bell,
   BellOff,
   BellRing,
+  Activity,
+  Send,
 } from 'lucide-react';
 import {
   fetchAllProfiles,
   fetchPushAdminOverview,
   checkPushHealthMigration,
+  fetchSendPushDryRun,
+  invokeSendPushTest,
+  SendPushDryRun,
   AdminProfileEntry,
   PushDeviceSummary,
   UserRole,
@@ -51,6 +56,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // every row then shows "Not asked" / "Not subscribed" regardless of
   // reality, so the panel must say so instead of looking complete.
   const [pushMigrationOk, setPushMigrationOk] = useState<boolean | null>(null);
+  // Live delivery-pipeline probe (dryRun sends NOTHING) + per-user test push.
+  const [dryRun, setDryRun] = useState<SendPushDryRun | null>(null);
+  const [checkingPipe, setCheckingPipe] = useState(false);
+  const [pipeError, setPipeError] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testMsg, setTestMsg] = useState<Record<string, string>>({});
+
+  const checkPipeline = useCallback(async () => {
+    setCheckingPipe(true);
+    setPipeError(null);
+    try {
+      setDryRun(await fetchSendPushDryRun());
+    } catch (err) {
+      setDryRun(null);
+      setPipeError(
+        err instanceof CloudError ? err.userMessage : 'Pipeline check failed.'
+      );
+    } finally {
+      setCheckingPipe(false);
+    }
+  }, []);
+
+  const sendTestPush = useCallback(async (userId: string, username: string | null) => {
+    setTestingId(userId);
+    try {
+      const n = await invokeSendPushTest(userId);
+      setTestMsg((prev) => ({
+        ...prev,
+        [userId]:
+          n > 0
+            ? `✓ test push accepted by ${n} device${n === 1 ? '' : 's'} — it should arrive in seconds, even with the app closed.`
+            : `⚠️ 0 devices accepted it — @${username ?? 'user'} looks subscribed but delivery failed (most often a VAPID key mismatch: the frontend VITE_VAPID_PUBLIC_KEY and the function VAPID_PUBLIC_KEY secret must be from the same pair).`,
+      }));
+    } catch (err) {
+      setTestMsg((prev) => ({
+        ...prev,
+        [userId]: `❌ ${err instanceof CloudError ? err.userMessage : 'Test push failed.'}`,
+      }));
+    } finally {
+      setTestingId(null);
+    }
+  }, []);
 
   const loadUsers = useCallback(async () => {
     setLoadingUsers(true);
@@ -300,6 +347,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         )}
 
+        {/* Live delivery-pipeline probe: answers "subscribed but no push?"
+            without guessing. dryRun sends NOTHING — diagnostics only. */}
+        <div className="rounded-xl bg-black/30 border border-white/10 p-3 mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Delivery pipeline</span>
+              </p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Checks the live send-push function (VAPID secrets, subscription rows, today&apos;s slots). Sends nothing.
+              </p>
+            </div>
+            <button
+              onClick={() => void checkPipeline()}
+              disabled={checkingPipe}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/40 text-cyan-200 text-xs font-bold transition cursor-pointer min-h-[40px] disabled:opacity-60"
+            >
+              <Activity className={`w-3.5 h-3.5 ${checkingPipe ? 'animate-spin' : ''}`} />
+              <span>{checkingPipe ? 'Checking…' : 'Check pipeline'}</span>
+            </button>
+          </div>
+          {pipeError && (
+            <p className="text-[11px] text-rose-300 font-semibold mt-2 leading-relaxed">{pipeError}</p>
+          )}
+          {dryRun && (
+            <div className="mt-2">
+              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="rounded-lg bg-white/[0.04] border border-white/10 p-2">
+                  <dt className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Function time (SL)</dt>
+                  <dd className="text-[11px] font-bold text-white mt-0.5">{dryRun.slTime}</dd>
+                </div>
+                <div className={`rounded-lg border p-2 ${dryRun.vapidConfigured ? 'bg-emerald-500/10 border-emerald-400/40' : 'bg-rose-500/10 border-rose-400/40'}`}>
+                  <dt className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">VAPID secrets</dt>
+                  <dd className={`text-[11px] font-black mt-0.5 ${dryRun.vapidConfigured ? 'text-emerald-300' : 'text-rose-300'}`}>
+                    {dryRun.vapidConfigured ? '✓ Set' : '✗ Missing'}
+                  </dd>
+                </div>
+                <div className="rounded-lg bg-white/[0.04] border border-white/10 p-2">
+                  <dt className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Subscription rows</dt>
+                  <dd className="text-[11px] font-bold text-white mt-0.5">{dryRun.subscriptionRows}</dd>
+                </div>
+                <div className="rounded-lg bg-white/[0.04] border border-white/10 p-2">
+                  <dt className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Reminder slots today</dt>
+                  <dd className="text-[11px] font-bold text-white mt-0.5">{dryRun.enabledSlotsToday}</dd>
+                </div>
+              </dl>
+              {!dryRun.vapidConfigured && (
+                <p className="text-[11px] text-rose-300 font-semibold mt-2 leading-relaxed">
+                  VAPID secrets are missing in the function: run
+                  <code className="px-1 py-0.5 rounded bg-black/40 border border-white/15 mx-1">supabase secrets set VAPID_PUBLIC_KEY=… VAPID_PRIVATE_KEY=… VAPID_SUBJECT=mailto:you@example.com</code>
+                  (public key must match the app&apos;s VITE_VAPID_PUBLIC_KEY — same pair), then redeploy the function. Nothing can be delivered until then.
+                </p>
+              )}
+              {dryRun.vapidConfigured && dryRun.subscriptionRows === 0 && (
+                <p className="text-[11px] text-amber-300 font-semibold mt-2 leading-relaxed">
+                  No subscription rows at all: the break is client-side — students grant permission but no device ever subscribes (VAPID key missing in the app build, service worker blocked, or an old app version). Ask one student to open Settings → check the closed-app push status there.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
         {pushError && (
           <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold mb-3">
             {pushError}
@@ -338,8 +448,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <td className="py-2.5 pr-3">{permissionBadge(u.pushPermission)}</td>
                       <td className="py-2.5 pr-3">
                         {devices > 0 ? (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-400/40">
-                            ✓ Receiving{devices > 1 ? ` (${devices} devices)` : ''}
+                          <span className="inline-flex flex-col items-start gap-1">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-400/40">
+                              ✓ Receiving{devices > 1 ? ` (${devices} devices)` : ''}
+                            </span>
+                            <button
+                              onClick={() => void sendTestPush(u.id, u.username)}
+                              disabled={testingId === u.id}
+                              title="Send one real closed-app push to this student's devices"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-400/30 text-cyan-200 text-[10px] font-bold transition cursor-pointer disabled:opacity-60"
+                            >
+                              <Send className="w-3 h-3" />
+                              <span>{testingId === u.id ? 'Sending…' : 'Test push'}</span>
+                            </button>
+                            {testMsg[u.id] && (
+                              <span className="text-[10px] text-slate-300 leading-snug max-w-[220px]">
+                                {testMsg[u.id]}
+                              </span>
+                            )}
                           </span>
                         ) : (
                           <span className="text-[10px] font-black px-2 py-0.5 rounded-full border bg-white/5 text-slate-400 border-white/15">

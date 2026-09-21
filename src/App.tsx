@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { DailyTask, ScreenId, StreamType, SyllabusTopic, TimetableEntry, UserSettings, TopicStatus, StreakData } from './types';
 import {
   getStoredTimetable,
@@ -29,6 +29,8 @@ import {
   ensureHealthyPushSubscription,
   unsubscribeFromPush,
   listenForPushSubscriptionChange,
+  getLocalPushState,
+  LocalPushState,
 } from './lib/notificationService';
 import {
   calculateStreak,
@@ -237,6 +239,10 @@ export default function App() {
     getNotificationPermissionStatus()
   );
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  // Real per-device closed-app push state for the Settings status card
+  // (null = not checked / not applicable). Refreshed when Settings is open.
+  const [pushStatus, setPushStatus] = useState<LocalPushState | null>(null);
+  const [reconnectingPush, setReconnectingPush] = useState(false);
   const [activeToastReminder, setActiveToastReminder] = useState<string | null>(null);
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
 
@@ -447,6 +453,41 @@ export default function App() {
     if (!authUserId) return;
     void ensureHealthyPushSubscription({ force: true }).catch(() => undefined);
   }, [authUserId]);
+
+  // Real push-status probe for the Settings card: re-check whenever Settings
+  // is opened (or permission flips to granted), plus on tab focus while it is
+  // open — the student may have just fixed browser settings elsewhere.
+  const refreshPushStatus = useCallback(async () => {
+    if (getNotificationPermissionStatus() !== 'granted') {
+      setPushStatus(null);
+      return;
+    }
+    setPushStatus(await getLocalPushState());
+  }, []);
+  useEffect(() => {
+    if (currentScreen !== 'settings') return;
+    void refreshPushStatus();
+    window.addEventListener('focus', refreshPushStatus);
+    return () => window.removeEventListener('focus', refreshPushStatus);
+  }, [currentScreen, notificationPermission, refreshPushStatus]);
+
+  /** Manual "Reconnect push" from Settings: force-heal then re-probe + toast. */
+  const handleReconnectPush = () => {
+    setReconnectingPush(true);
+    void ensureHealthyPushSubscription({ force: true })
+      .catch(() => undefined)
+      .then(() => getLocalPushState())
+      .then((s) => {
+        setPushStatus(s);
+        setNotificationPermission(getNotificationPermissionStatus());
+        setSyncToastMessage(
+          s === 'active'
+            ? '📲 Closed-app push reconnected on this device.'
+            : '⚠️ Reconnect did not finish — see the status above and try again.'
+        );
+      })
+      .finally(() => setReconnectingPush(false));
+  };
 
   // ---- Supabase session handling + cloud load/merge ----
   const loadCloudForUser = async (userId: string) => {
@@ -2156,6 +2197,9 @@ export default function App() {
             notificationPermission={notificationPermission}
             onRequestNotificationPermission={() => setIsNotificationModalOpen(true)}
             onSendTestNotification={handleTestSmartReminder}
+            pushStatus={pushStatus}
+            onReconnectPush={handleReconnectPush}
+            reconnectingPush={reconnectingPush}
             onDisablePushNotifications={() => {
               void unsubscribeFromPush()
                 .catch(() => undefined)
@@ -2202,6 +2246,15 @@ export default function App() {
         }}
         onPermissionUpdated={(perm) => {
           setNotificationPermission(perm);
+          if (perm === 'granted') {
+            // Fresh grant: heal immediately, then probe so Settings shows the
+            // real device state instead of assuming delivery works.
+            void ensureHealthyPushSubscription({ force: true })
+              .catch(() => undefined)
+              .then(() => getLocalPushState())
+              .then((s) => setPushStatus(s))
+              .catch(() => undefined);
+          }
           markNotifierExplainerSeen();
           handleUpdateSettings({
             notificationsGranted: perm === 'granted',

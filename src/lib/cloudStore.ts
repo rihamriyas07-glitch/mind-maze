@@ -450,6 +450,68 @@ async function fetchPushAdminOverviewDirect(): Promise<PushDeviceSummary[]> {
   }
 }
 
+/** Live send-push pipeline state (dryRun sends NOTHING — diagnostics only). */
+export interface SendPushDryRun {
+  slTime: string;
+  vapidConfigured: boolean;
+  subscriptionRows: number;
+  enabledSlotsToday: number;
+}
+
+/**
+ * Ask the deployed send-push Edge Function for its live pipeline state.
+ * Admin-gated server-side (403 for non-admins). Tells "subscribed but no
+ * push" apart instantly: vapidConfigured=false → set the function secrets;
+ * subscriptionRows=0 → nobody has a server row (client-side); both healthy
+ * but enabledSlotsToday=0 → simply nothing due today.
+ */
+export async function fetchSendPushDryRun(): Promise<SendPushDryRun> {
+  try {
+    const { data, error } = await requireClient().functions.invoke('send-push', {
+      body: { dryRun: true },
+    });
+    if (error) throw error;
+    const r = (data ?? {}) as Record<string, unknown>;
+    return {
+      slTime: typeof r.slTime === 'string' ? r.slTime : '—',
+      vapidConfigured: r.vapidConfigured === true,
+      subscriptionRows: typeof r.subscriptionRows === 'number' ? r.subscriptionRows : 0,
+      enabledSlotsToday: typeof r.enabledSlotsToday === 'number' ? r.enabledSlotsToday : 0,
+    };
+  } catch (err) {
+    const { message } = describeError(err);
+    if (/403|forbidden|not allowed|unauthorized/i.test(message)) {
+      throw new CloudError('Pipeline check was refused (403): your account is not an admin, or the deployed send-push function predates the admin gate — redeploy it with `supabase functions deploy send-push`.');
+    }
+    if (err instanceof CloudError) throw err;
+    throw friendlyError('Pipeline check failed (is the send-push function deployed and the 15-min cron scheduled?).', err);
+  }
+}
+
+/**
+ * Send one REAL closed-app push to a student's devices via the Edge Function
+ * (admin only, 403 otherwise). Returns how many subscriptions accepted it.
+ * 0 with subscribed devices = delivery failure (usually a VAPID public-key
+ * mismatch between this frontend build and the function secrets).
+ */
+export async function invokeSendPushTest(userId: string): Promise<number> {
+  try {
+    const { data, error } = await requireClient().functions.invoke('send-push', {
+      body: { testUserId: userId },
+    });
+    if (error) throw error;
+    const n = Number((data as { sentToSubscriptions?: unknown } | null)?.sentToSubscriptions ?? 0);
+    return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+  } catch (err) {
+    const { message } = describeError(err);
+    if (/403|forbidden|not allowed|unauthorized/i.test(message)) {
+      throw new CloudError('Test push was refused (403): redeploy the send-push function with `supabase functions deploy send-push` so the admin gate exists.');
+    }
+    if (err instanceof CloudError) throw err;
+    throw friendlyError('Test push failed.', err);
+  }
+}
+
 /**
  * Probe whether the push-health migration has been applied to this database
  * (profiles.push_permission column present). Used by the Admin Panel to warn

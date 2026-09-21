@@ -14,6 +14,7 @@ import {
   Phone,
 } from 'lucide-react';
 import { BrowserReenableSteps } from '../notifications/BrowserReenableSteps';
+import type { LocalPushState } from '../../lib/notificationService';
 
 interface SettingsScreenProps {
   stream: StreamType;
@@ -33,6 +34,12 @@ interface SettingsScreenProps {
   onSendTestNotification?: () => void;
   /** Removes this device's closed-app push subscription (stays signed in). */
   onDisablePushNotifications?: () => void;
+  /** Real per-device closed-app push state (null while checking). */
+  pushStatus?: LocalPushState | null;
+  /** Re-runs the silent heal to (re)create this device's push subscription. */
+  onReconnectPush?: () => void;
+  /** True while a reconnect attempt is in flight. */
+  reconnectingPush?: boolean;
   username?: string | null;
   /** Temporary debug: role the app resolved from profiles.role. */
   userRole?: 'student' | 'admin';
@@ -61,6 +68,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onRequestNotificationPermission,
   onSendTestNotification,
   onDisablePushNotifications,
+  pushStatus = null,
+  onReconnectPush,
+  reconnectingPush = false,
   cloudSyncEnabled = false,
   onSignOut,
 }) => {
@@ -253,6 +263,63 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               )}
           </div>
         </div>
+
+        {/* Real per-device closed-app push state. Browser permission alone is
+            NOT delivery: this verifies the subscription + server row exist. */}
+        {notificationPermission === 'granted' && (
+          <div
+            className={`mt-3 rounded-2xl border p-3 text-xs leading-relaxed ${
+              pushStatus === 'active'
+                ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                : pushStatus === null || pushStatus === 'unknown'
+                  ? 'border-white/10 bg-white/5 text-slate-300'
+                  : 'border-amber-400/40 bg-amber-500/10 text-amber-200'
+            }`}
+          >
+            {pushStatus === 'active' ? (
+              <span>
+                <strong>📲 Closed-app push is active on this device.</strong> You&apos;ll get timetable
+                pre-alerts and streak reminders even with the app closed.
+              </span>
+            ) : pushStatus === null || pushStatus === 'unknown' ? (
+              <span>📲 Checking this device&apos;s closed-app push connection…</span>
+            ) : pushStatus === 'no-key' ? (
+              <span>
+                <strong>⚠️ Push service isn&apos;t configured in this app build.</strong> The app owner
+                needs to set the VAPID public key for this deployment — granting permission alone
+                can&apos;t deliver pushes until then.
+              </span>
+            ) : pushStatus === 'no-service-worker' ? (
+              <span>
+                <strong>⚠️ No background worker running.</strong> Reload the app once (or reinstall
+                it) and check again — closed-app push needs it.
+              </span>
+            ) : pushStatus === 'unsupported' || pushStatus === 'no-permission' ? (
+              <span>📲 This browser/device can&apos;t receive closed-app push. In-app reminders still work.</span>
+            ) : (
+              <span className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <span>
+                  <strong>⚠️ Closed-app push isn&apos;t connected on this device</strong>
+                  {pushStatus === 'not-synced'
+                    ? ' (browser subscription exists but the server has no record of it).'
+                    : ' (no browser subscription yet).'}{' '}
+                  Tap Reconnect to fix it.
+                </span>
+                {onReconnectPush && (
+                  <button
+                    type="button"
+                    onClick={onReconnectPush}
+                    disabled={reconnectingPush}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#6B4EFF] to-[#8B5CF6] text-white text-xs font-bold transition shadow-md cursor-pointer min-h-[40px] shrink-0 disabled:opacity-60"
+                  >
+                    <Bell className="w-4 h-4" />
+                    <span>{reconnectingPush ? 'Reconnecting…' : 'Reconnect push'}</span>
+                  </button>
+                )}
+              </span>
+            )}
+          </div>
+        )}
 
         <p className="text-xs text-slate-300 mt-2 leading-relaxed">
           Get reminded when it&apos;s time to study, keep your streak alive, and stay on track for your A/Ls. 💪

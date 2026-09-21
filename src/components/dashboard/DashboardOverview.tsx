@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { DailyTask, ScreenId, StreamType, SyllabusTopic, TimetableEntry, StreakData } from '../../types';
 import {
   LayoutDashboard,
@@ -18,10 +18,18 @@ import {
   Trophy,
   Volume2,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { getTodayDateString, getTodayDayOfWeek } from '../../lib/storage';
 import { getSubjectsForStream } from '../../data/alSyllabusData';
-import { playStudyChime } from '../../lib/notificationService';
+import {
+  playStudyChime,
+  isPushPromptSnoozed,
+  snoozePushPrompt,
+  isBlockedPromptSnoozed,
+  snoozeBlockedPrompt,
+  PUSH_PROMPT_SNOOZED_EVENT,
+} from '../../lib/notificationService';
 import { BrowserReenableSteps } from '../notifications/BrowserReenableSteps';
 import { PWAInstallButton } from '../PWAInstallButton';
 import {
@@ -74,6 +82,26 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 }) => {
   const todayStr = getTodayDateString();
   const todayDayOfWeek = getTodayDayOfWeek();
+
+  // Dismissible notification prompts: "Later"/X snoozes for 7 days via the
+  // key shared with the floating banner, so dismissed students are never
+  // nagged on every app open. The snooze event keeps this in sync when the
+  // floating banner is dismissed in the same tab.
+  const [promptSnoozed, setPromptSnoozed] = useState<boolean>(() => isPushPromptSnoozed());
+  const [blockedSnoozed, setBlockedSnoozed] = useState<boolean>(() => isBlockedPromptSnoozed());
+  useEffect(() => {
+    const refresh = () => {
+      setPromptSnoozed(isPushPromptSnoozed());
+      setBlockedSnoozed(isBlockedPromptSnoozed());
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    window.addEventListener(PUSH_PROMPT_SNOOZED_EVENT, refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener(PUSH_PROMPT_SNOOZED_EVENT, refresh);
+    };
+  }, []);
 
   // Selected stream subjects:
   // Physical Science: Combined Mathematics, Physics, and either Chemistry OR ICT
@@ -177,10 +205,22 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           )}
         </div>
       )}
-      {/* Notification status banners */}
-      {notificationPermission === 'denied' ? (
-        <div className="rounded-2xl border border-rose-500/40 bg-gradient-to-r from-rose-500/15 via-[#1E1835] to-purple-500/15 p-3.5 sm:p-4 backdrop-blur-md shadow-lg animate-fadeIn">
-          <div className="flex items-center gap-3">
+      {/* Notification status banners — both dismissible (7-day snooze) so they
+          never nag on every app open. Full guidance always remains in Settings. */}
+      {notificationPermission === 'denied' && !blockedSnoozed ? (
+        <div className="relative rounded-2xl border border-rose-500/40 bg-gradient-to-r from-rose-500/15 via-[#1E1835] to-purple-500/15 p-3.5 sm:p-4 backdrop-blur-md shadow-lg animate-fadeIn">
+          <button
+            onClick={() => {
+              snoozeBlockedPrompt();
+              setBlockedSnoozed(true);
+            }}
+            aria-label="Dismiss blocked-reminders notice for 7 days"
+            title="Dismiss for 7 days"
+            className="absolute top-2 right-2 p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-3 pr-10">
             <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 shrink-0">
               <BellOff className="w-5 h-5" />
             </div>
@@ -197,9 +237,20 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <BrowserReenableSteps />
           </div>
         </div>
-      ) : notificationPermission !== 'granted' && (
-        <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-[#1E1835] to-purple-500/15 p-3.5 sm:p-4 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg animate-fadeIn">
-          <div className="flex items-center gap-3">
+      ) : notificationPermission !== 'granted' && notificationPermission !== 'unsupported' && !promptSnoozed && (
+        <div className="relative rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-[#1E1835] to-purple-500/15 p-3.5 sm:p-4 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg animate-fadeIn">
+          <button
+            onClick={() => {
+              snoozePushPrompt();
+              setPromptSnoozed(true);
+            }}
+            aria-label="Dismiss reminders prompt for 7 days"
+            title="Dismiss for 7 days"
+            className="absolute top-2 right-2 p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-3 pr-10">
             <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
               <BellOff className="w-5 h-5" />
             </div>
@@ -231,6 +282,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             >
               <Volume2 className="w-4 h-4" />
               <span>Test Chime</span>
+            </button>
+            <button
+              onClick={() => {
+                snoozePushPrompt();
+                setPromptSnoozed(true);
+              }}
+              className="px-3 py-2 rounded-xl text-[11px] font-semibold text-slate-400 hover:text-slate-200 hover:bg-white/5 transition cursor-pointer min-h-[44px]"
+            >
+              Later
             </button>
           </div>
         </div>

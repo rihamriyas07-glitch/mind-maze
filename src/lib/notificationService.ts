@@ -312,6 +312,124 @@ export async function unsubscribeFromPush(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Shared "ask again later" snooze for every Enable-reminders prompt.
+// The floating PushSubscribeBanner AND the Dashboard banner share ONE snooze
+// key, so dismissing either one silences both for 7 days — students are never
+// double-nagged, and never nagged on every app open. Bumping the key suffix
+// re-prompts everyone exactly once after major notification upgrades.
+// A same-tab window event keeps both banners in sync without a reload.
+// ---------------------------------------------------------------------------
+
+const PUSH_PROMPT_SNOOZE_KEY = 'mindmaze_push_banner_dismissed_v2';
+const BLOCKED_PROMPT_SNOOZE_KEY = 'mindmaze_blocked_banner_dismissed_v1';
+const PROMPT_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+export const PUSH_PROMPT_SNOOZED_EVENT = 'mindmaze:push-prompt-snoozed';
+
+function readSnooze(key: string): boolean {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    return Date.now() - Number(raw) < PROMPT_SNOOZE_MS;
+  } catch {
+    return false;
+  }
+}
+
+function writeSnooze(key: string): void {
+  try {
+    localStorage.setItem(key, String(Date.now()));
+  } catch {}
+  try {
+    window.dispatchEvent(new Event(PUSH_PROMPT_SNOOZED_EVENT));
+  } catch {}
+}
+
+/** True when the "turn on reminders" prompt was dismissed in the last 7 days. */
+export function isPushPromptSnoozed(): boolean {
+  return readSnooze(PUSH_PROMPT_SNOOZE_KEY);
+}
+
+/** Snooze the "turn on reminders" prompt for 7 days (both banners listen). */
+export function snoozePushPrompt(): void {
+  writeSnooze(PUSH_PROMPT_SNOOZE_KEY);
+}
+
+/** True when the "reminders are blocked" prompt was dismissed in the last 7 days. */
+export function isBlockedPromptSnoozed(): boolean {
+  return readSnooze(BLOCKED_PROMPT_SNOOZE_KEY);
+}
+
+/** Snooze the "reminders are blocked" prompt for 7 days. */
+export function snoozeBlockedPrompt(): void {
+  writeSnooze(BLOCKED_PROMPT_SNOOZE_KEY);
+}
+
+// ---------------------------------------------------------------------------
+// Real per-device push status. Settings used to show "Enabled" from
+// Notification.permission alone — a student could look fully subscribed while
+// having NO push subscription row (VAPID key missing in the production build,
+// service worker failed, silent subscribe failure) and closed-app pushes
+// would never arrive. This reports the actual device state so the UI can show
+// "Not connected — reason + Reconnect" instead of a false green tick.
+// ---------------------------------------------------------------------------
+
+export type LocalPushState =
+  | 'active'
+  | 'unsupported'
+  | 'no-permission'
+  | 'no-key'
+  | 'no-service-worker'
+  | 'not-subscribed'
+  | 'not-synced'
+  | 'unknown';
+
+/** True when a VAPID public key was baked into this build. Missing in a
+ *  production build (e.g. Vercel env var unset) = subscribe always fails. */
+export function isVapidKeyConfigured(): boolean {
+  try {
+    return !!((import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined) || '').trim();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Inspect this device's real closed-app push state. Never throws.
+ * 'active' means a live subscription exists AND its server row is present.
+ */
+export async function getLocalPushState(): Promise<LocalPushState> {
+  try {
+    if (!isPushSupported()) return 'unsupported';
+    if (Notification.permission !== 'granted') return 'no-permission';
+    if (!isVapidKeyConfigured()) return 'no-key';
+    const reg = await getReadyRegistration(3000);
+    if (!reg) return 'no-service-worker';
+    const sub = await reg.pushManager.getSubscription().catch(() => null);
+    if (!sub) return 'not-subscribed';
+    // Subscription exists locally — is its row on the server? (Owner RLS
+    // policy lets a signed-in student read their own rows.)
+    try {
+      const { supabase } = await import('./supabaseClient');
+      if (!supabase) return 'unknown';
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user?.id) return 'not-synced';
+      const { data, error } = await supabase
+        .from('push_subscriptions')
+        .select('endpoint')
+        .eq('user_id', userData.user.id)
+        .eq('endpoint', sub.endpoint)
+        .maybeSingle();
+      if (error) return 'unknown';
+      return data ? 'active' : 'not-synced';
+    } catch {
+      return 'unknown';
+    }
+  } catch {
+    return 'unknown';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Silent background health check. Runs on app load / sign-in and (throttled)
 // when the tab regains focus. Never shows UI and never throws — students who
 // never granted permission keep seeing the existing Enable prompts as before.

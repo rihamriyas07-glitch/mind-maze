@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Bell, BellOff, X } from 'lucide-react';
+import { Bell, X } from 'lucide-react';
 import {
   getNotificationPermissionStatus,
   isPushSupported,
+  isPushPromptSnoozed,
+  snoozePushPrompt,
+  PUSH_PROMPT_SNOOZED_EVENT,
 } from '../../lib/notificationService';
 
 /**
@@ -10,19 +13,19 @@ import {
  *
  * The one-time onboarding explainer modal fires only once per account, so
  * students who dismissed it (or joined before push existed) never get asked
- * again. This banner closes that gap: it re-appears for signed-in users
- * whose browser permission is still undecided ('default') or blocked
- * ('denied'), and one tap opens the existing permission explainer modal —
- * the native browser prompt still fires ONLY from an explicit tap inside
- * that modal, never automatically.
+ * again. This banner closes that gap for signed-in users whose browser
+ * permission is still undecided ('default'): one tap opens the existing
+ * permission explainer modal — the native browser prompt still fires ONLY
+ * from an explicit tap inside that modal, never automatically.
  *
- * - 'default'  → "Turn on study reminders" CTA button.
- * - 'denied'   → no button can work (browser blocks re-prompts); shows how
- *                to re-enable in site settings instead.
- * - 'granted' / 'unsupported' → renders nothing (silent heal covers granted).
- *
- * Dismissal snoozes for 7 days under a versioned key, so bumping the key
- * suffix re-prompts everyone exactly once after major notification upgrades.
+ * Anti-nag rules (the reason this file exists in this form):
+ * - 'default' only. Blocked ('denied') users get nothing here: they already
+ *   see full re-enable steps on the Dashboard + Settings, and a floating nag
+ *   they can only fix in browser site settings is pure noise.
+ * - 'granted' / 'unsupported' → renders nothing.
+ * - Dismissing snoozes for 7 days under a key SHARED with the Dashboard
+ *   banner (see notificationService snoozePushPrompt), so dismissing either
+ *   prompt silences both — never a nag on every app open.
  */
 interface PushSubscribeBannerProps {
   /** App-level permission state (re-render trigger); live value is re-read. */
@@ -31,51 +34,44 @@ interface PushSubscribeBannerProps {
   onEnable: () => void;
 }
 
-const DISMISS_KEY = 'mindmaze_push_banner_dismissed_v2';
-const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
-
-function isSnoozed(): boolean {
-  try {
-    const raw = localStorage.getItem(DISMISS_KEY);
-    if (!raw) return false;
-    return Date.now() - Number(raw) < SNOOZE_MS;
-  } catch {
-    return false;
-  }
-}
-
 export const PushSubscribeBanner: React.FC<PushSubscribeBannerProps> = ({
   permission,
   onEnable,
 }) => {
-  const [snoozed, setSnoozed] = useState<boolean>(() => isSnoozed());
+  const [snoozed, setSnoozed] = useState<boolean>(() => isPushPromptSnoozed());
   const [live, setLive] = useState<NotificationPermission | 'unsupported'>(permission);
 
   // Re-read the real browser permission on focus: the student may have
-  // granted/blocked it in site settings and returned to the tab.
+  // granted/blocked it in site settings and returned to the tab. Also
+  // re-check the shared snooze (dismissed in another tab, or via the
+  // Dashboard banner in this same tab through the snooze event).
   useEffect(() => {
+    const refresh = () => {
+      setLive(getNotificationPermissionStatus());
+      setSnoozed(isPushPromptSnoozed());
+    };
     setLive(getNotificationPermissionStatus());
-    const refresh = () => setLive(getNotificationPermissionStatus());
+    setSnoozed(isPushPromptSnoozed());
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
+    window.addEventListener(PUSH_PROMPT_SNOOZED_EVENT, refresh);
     return () => {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener(PUSH_PROMPT_SNOOZED_EVENT, refresh);
     };
   }, [permission]);
 
   const dismiss = useCallback(() => {
-    try {
-      localStorage.setItem(DISMISS_KEY, String(Date.now()));
-    } catch {}
+    snoozePushPrompt();
     setSnoozed(true);
   }, []);
 
   if (!isPushSupported()) return null;
   if (snoozed) return null;
-  if (live === 'granted' || live === 'unsupported') return null;
-
-  const blocked = live === 'denied';
+  // Default-only: granted/unsupported hide silently, denied is handled by the
+  // Dashboard + Settings re-enable steps (a floating nag can't help there).
+  if (live !== 'default') return null;
 
   return (
     <div
@@ -86,32 +82,28 @@ export const PushSubscribeBanner: React.FC<PushSubscribeBannerProps> = ({
     >
       <div className="flex items-start gap-3">
         <div className="p-2.5 rounded-xl bg-gradient-to-br from-[#6B4EFF] to-cyan-400 text-white shrink-0 shadow-md">
-          {blocked ? <BellOff className="w-5 h-5 text-white" /> : <Bell className="w-5 h-5 text-white" />}
+          <Bell className="w-5 h-5 text-white" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold text-white">
-            {blocked ? 'Reminders are blocked' : 'Turn on study reminders'}
+            Turn on study reminders
           </p>
           <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-            {blocked
-              ? 'You blocked notifications for this site. Re-enable them in your browser\u2019s site settings (lock icon → Notifications → Allow), then reopen the app.'
-              : 'Get 15-minute pre-alerts, streak protection, and the daily countdown — even with the app closed.'}
+            Get 15-minute pre-alerts, streak protection, and the daily countdown — even with the app closed.
           </p>
           <div className="mt-2.5 flex items-center gap-2">
-            {!blocked && (
-              <button
-                onClick={onEnable}
-                id="btn-banner-enable-notifications"
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#6B4EFF] to-[#8B5CF6] hover:from-[#7C5DFA] hover:to-[#9D74FF] text-xs font-bold text-white shadow-lg transition cursor-pointer min-h-[44px]"
-              >
-                Enable reminders
-              </button>
-            )}
+            <button
+              onClick={onEnable}
+              id="btn-banner-enable-notifications"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#6B4EFF] to-[#8B5CF6] hover:from-[#7C5DFA] hover:to-[#9D74FF] text-xs font-bold text-white shadow-lg transition cursor-pointer min-h-[44px]"
+            >
+              Enable reminders
+            </button>
             <button
               onClick={dismiss}
               className="px-2.5 py-2 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-slate-200 hover:bg-white/5 transition cursor-pointer min-h-[44px]"
             >
-              {blocked ? 'Dismiss' : 'Later'}
+              Later
             </button>
           </div>
         </div>

@@ -41,9 +41,48 @@ const WHATSAPP_CHANNEL_URL = "https://whatsapp.com/channel/0029Vb8OnJGCRs1fpYosg
 const WHATSAPP_QUIZ_ICON = "https://mind-maze-mu.vercel.app/bell.png";
 const SL_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
-function toMinutes(t: string): number {
+/** Minutes since midnight for "HH:MM", or null when malformed. A single bad
+ *  row must NEVER throw: an uncaught throw here 500s the whole cron run and
+ *  zero pushes go out to ANYONE. Callers skip null rows. */
+function toMinutes(t: unknown): number | null {
+  if (typeof t !== "string" || !/^\d{1,2}:\d{2}/.test(t)) return null;
   const [h, m] = t.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
   return h * 60 + m;
+}
+
+/** Decode the Bearer JWT payload WITHOUT verifying (the edge runtime already
+ *  verified the signature when JWT verification is enabled). Used only to
+ *  find the caller for the admin gate below. */
+function getJwtClaims(req: Request): Record<string, unknown> | null {
+  try {
+    const auth = req.headers.get("Authorization") ?? "";
+    const token = auth.replace(/^Bearer\s+/i, "").trim();
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the caller may use the diagnostic endpoints (dryRun / testUserId):
+ *  the service_role key (cron + owner curl) or a signed-in admin user.
+ *  Regular students get 403 — otherwise anyone could trigger pushes to anyone. */
+async function callerIsAdmin(supabase: any, req: Request): Promise<boolean> {
+  const claims = getJwtClaims(req);
+  if (!claims) return false;
+  if (claims.role === "service_role") return true;
+  const sub = typeof claims.sub === "string" ? claims.sub : null;
+  if (!sub) return false;
+  try {
+    const { data } = await supabase.from("profiles").select("role").eq("id", sub).maybeSingle();
+    return (data as { role?: unknown } | null)?.role === "admin";
+  } catch {
+    return false;
+  }
 }
 
 async function alreadySent(supabase: any, userId: string, dedupeKey: string): Promise<boolean> {
@@ -117,9 +156,12 @@ Deno.serve(async (req) => {
 
   // --- Diagnostic: POST {"dryRun": true} sends NOTHING — it reports whether
   // the pipeline is alive, whether VAPID secrets exist, and whether there is
-  // anyone to send to. (Previously the flag was echoed but every push below
-  // still went out — a trap when "just checking".)
+  // anyone to send to. Admin-only (plus the service_role cron/owner key):
+  // row counts are not for regular students.
   if (body?.dryRun === true) {
+    if (!(await callerIsAdmin(supabase, req))) {
+      return Response.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
     const { count: subCount } = await supabase
       .from("push_subscriptions")
       .select("user_id", { count: "exact", head: true });
@@ -138,9 +180,18 @@ Deno.serve(async (req) => {
     });
   }
 
-  // --- Manual test: POST {"testUserId":"<uuid>"} sends one push immediately ---
+  // --- Manual test: POST {"testUserId":"<uuid>"} sends one push immediately.
+  // Admin-only: without this gate any signed-in user could trigger pushes to
+  // any other user. The Admin Panel "Send test push" button calls this.
   if (body?.testUserId) {
-    const n = await sendToUser(supabase, body.testUserId, {
+    if (!(await callerIsAdmin(supabase, req))) {
+      return Response.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
+    const targetId = String(body.testUserId);
+    if (!/^[0-9a-f-]{36}$/i.test(targetId)) {
+      return Response.json({ ok: false, error: "bad user id" }, { status: 400 });
+    }
+    const n = await sendToUser(supabase, targetId, {
       title: "🔔 Mind Maze test push",
       body: "Closed-app push works! This arrived without any open tab.",
       tag: "mind-maze-test",
@@ -160,53 +211,77 @@ Deno.serve(async (req) => {
   // --- 1. Timetable pre-alerts due in the last 15-min window ---
   // start_time values are Sri Lanka wall-clock times (e.g. "06:00" = 6am SL),
   // so dayName/nowMin/todayStr above MUST be the SL-anchored values.
-  const { data: slots } = await supabase
-    .from("timetable_entries")
-    .select("user_id, id, subject, topic, start_time, reminder_offset_minutes")
-    .eq("day_of_week", dayName)
-    .eq("reminder_enabled", true);
+  // Each section is isolated: one bad row / failed query must never abort the
+  // other notification types (a single throw used to 500 the run → nobody got
+  // ANY push that tick).
+  try {
+    const { data: slots } = await supabase
+      .from("timetable_entries")
+      .select("user_id, id, subject, topic, start_time, reminder_offset_minutes")
+      .eq("day_of_week", dayName)
+      .eq("reminder_enabled", true);
 
-  for (const s of slots ?? []) {
-    const target = toMinutes(s.start_time) - (s.reminder_offset_minutes ?? 15);
-    const minsAgo = nowMin - target;
-    if (minsAgo < 0 || minsAgo > 15) continue; // due within this cron tick
-    const dedupe = `tt:${s.id}:${todayStr}:${target}`;
-    if (await alreadySent(supabase, s.user_id, dedupe)) continue;
-    const n = await sendToUser(supabase, s.user_id, {
-      title: `📚 ${s.subject} in ${s.reminder_offset_minutes ?? 15} min`,
-      body: `${s.topic} (${s.start_time}) — gather your past papers!`,
-      tag: dedupe,
-      url: "/",
-    });
-    if (n > 0) {
-      await markSent(supabase, s.user_id, "timetable", dedupe);
-      sent += n;
+    for (const s of slots ?? []) {
+      try {
+        const startMin = toMinutes((s as any).start_time);
+        if (startMin === null) continue; // malformed row: skip, don't crash
+        const offset = typeof (s as any).reminder_offset_minutes === "number"
+          ? (s as any).reminder_offset_minutes
+          : 15;
+        const target = startMin - offset;
+        const minsAgo = nowMin - target;
+        if (minsAgo < 0 || minsAgo > 15) continue; // due within this cron tick
+        const dedupe = `tt:${(s as any).id}:${todayStr}:${target}`;
+        if (await alreadySent(supabase, (s as any).user_id, dedupe)) continue;
+        const n = await sendToUser(supabase, (s as any).user_id, {
+          title: `📚 ${(s as any).subject} in ${offset} min`,
+          body: `${(s as any).topic} (${(s as any).start_time}) — gather your past papers!`,
+          tag: dedupe,
+          url: "/",
+        });
+        if (n > 0) {
+          await markSent(supabase, (s as any).user_id, "timetable", dedupe);
+          sent += n;
+        }
+      } catch (e) {
+        console.warn("timetable slot send failed, continuing:", (e as Error)?.message ?? e);
+      }
     }
+  } catch (e) {
+    console.warn("timetable section failed, continuing:", (e as Error)?.message ?? e);
   }
 
   // --- 2. Daily streak-nudge: one per day for users with incomplete tasks ---
   // (Keeps it cheap: one cron pass, one push per user per day max.)
   // daily_tasks.date is a client-local (SL) calendar date, so match it
   // against the SL-anchored todayStr, not server UTC date.
-  const { data: tasks } = await supabase
-    .from("daily_tasks")
-    .select("user_id")
-    .eq("date", todayStr)
-    .eq("is_completed", false);
-  const usersWithIncomplete = [...new Set((tasks ?? []).map((t: any) => t.user_id))];
-  for (const userId of usersWithIncomplete) {
-    const dedupe = `nudge:${todayStr}`;
-    if (await alreadySent(supabase, userId, dedupe)) continue;
-    const n = await sendToUser(supabase, userId, {
-      title: "🔥 Protect your streak",
-      body: "You still have unfinished topics today. A short session keeps the streak alive!",
-      tag: dedupe,
-      url: "/",
-    });
-    if (n > 0) {
-      await markSent(supabase, userId, "nudge", dedupe);
-      sent += n;
+  try {
+    const { data: tasks } = await supabase
+      .from("daily_tasks")
+      .select("user_id")
+      .eq("date", todayStr)
+      .eq("is_completed", false);
+    const usersWithIncomplete = [...new Set((tasks ?? []).map((t: any) => t.user_id))];
+    for (const userId of usersWithIncomplete) {
+      try {
+        const dedupe = `nudge:${todayStr}`;
+        if (await alreadySent(supabase, userId, dedupe)) continue;
+        const n = await sendToUser(supabase, userId, {
+          title: "🔥 Protect your streak",
+          body: "You still have unfinished topics today. A short session keeps the streak alive!",
+          tag: dedupe,
+          url: "/",
+        });
+        if (n > 0) {
+          await markSent(supabase, userId, "nudge", dedupe);
+          sent += n;
+        }
+      } catch (e) {
+        console.warn("nudge send failed, continuing:", (e as Error)?.message ?? e);
+      }
     }
+  } catch (e) {
+    console.warn("nudge section failed, continuing:", (e as Error)?.message ?? e);
   }
 
   // --- 3. WhatsApp daily quiz reminder: 12:00 & 17:00 Sri Lanka time ---
@@ -235,15 +310,23 @@ Deno.serve(async (req) => {
         url: WHATSAPP_CHANNEL_URL,
         icon: WHATSAPP_QUIZ_ICON,
       };
-    const { data: allSubs } = await supabase.from("push_subscriptions").select("user_id");
-    const allUserIds = [...new Set((allSubs ?? []).map((s: any) => s.user_id))];
-    for (const userId of allUserIds) {
-      if (await alreadySent(supabase, userId, dedupe)) continue;
-      const n = await sendToUser(supabase, userId, payload);
-      if (n > 0) {
-        await markSent(supabase, userId, "whatsapp_quiz", dedupe);
-        sent += n;
+    try {
+      const { data: allSubs } = await supabase.from("push_subscriptions").select("user_id");
+      const allUserIds = [...new Set((allSubs ?? []).map((s: any) => s.user_id))];
+      for (const userId of allUserIds) {
+        try {
+          if (await alreadySent(supabase, userId, dedupe)) continue;
+          const n = await sendToUser(supabase, userId, payload);
+          if (n > 0) {
+            await markSent(supabase, userId, "whatsapp_quiz", dedupe);
+            sent += n;
+          }
+        } catch (e) {
+          console.warn("quiz send failed, continuing:", (e as Error)?.message ?? e);
+        }
       }
+    } catch (e) {
+      console.warn("quiz section failed, continuing:", (e as Error)?.message ?? e);
     }
   }
 
